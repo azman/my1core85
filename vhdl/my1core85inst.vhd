@@ -9,7 +9,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 --use ieee.numeric_std.all;
-use work.my1core85_pack.all; 
+use work.my1core85pack.all; 
 
 entity my1core85inst is
 	port
@@ -19,7 +19,7 @@ entity my1core85inst is
 	);
 end my1core85inst;
 
-architecture behavioral of my1core85inst is
+architecture structural of my1core85inst is
 
 	signal inst_reg: std_logic_vector(DATASIZE-1 downto 0);
 	signal inst_cat: std_logic_vector(1 downto 0);
@@ -81,4 +81,4 @@ begin
 		end if;
 	end process reg_write;
 
-end behavioral;
+end structural;

@@ -7,7 +7,8 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
-use work.my1core85_pack.all; 
+use work.my1core85pack.all; 
+use work.all;
 
 entity my1core85 is
 	port
@@ -56,6 +57,19 @@ begin
 	sys_clk <= CLK;
 	reg_clk <= not CLK;
 
+	inst_in <= (
+		reg_clk => reg_clk,
+		reg_enb => ctrl_out.enb_ireg,
+		reg_data => data_in
+		);
+
+	inst_unit : entity my1core85inst(structural)
+	port map
+	(
+		port_in => inst_in,
+		port_out => inst_out
+	);
+
 	ctrl_in <= (
 		sys_clk => sys_clk,
 		pin_rdy => READY,
@@ -64,20 +78,7 @@ begin
 		get_inst => inst_out
 		);
 
-	inst_in <= (
-		reg_clk => reg_clk,
-		reg_enb => ctrl_out.enb_ireg,
-		reg_data => data_in
-		);
-
-	inst_unit : entity my1core85inst(behavioral)
-	port map
-	(
-		port_in => inst_in,
-		port_out => inst_out
-	);
-
-	ctrl_unit : entity my1core85ctrl(behavioral)
+	ctrl_unit : entity my1core85ctrl(structural)
 	port map
 	(
 		port_in => ctrl_in,

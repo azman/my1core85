@@ -1,8 +1,16 @@
+-----------------------------------------------------------------------------
+-- Filename: my1core85_tb.vhd
+-- Function: Test Bench for the 8085 Core
+-- Comment:
+-- == needs a valid HEX file!
+------------------------------------------------------------------------------
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use work.my1core85_pack.all;
-use work.my1core85_sim.all;
+use work.my1core85pack.all;
+use work.my1core85sim.all;
+use work.all;
 
 entity my1core85_tb is
 end my1core85_tb;

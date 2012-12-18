@@ -1,3 +1,10 @@
+-----------------------------------------------------------------------------
+-- Filename: my1core85sim.vhd
+-- Function: 8085 Core Simulation Package
+-- Comment:
+-- == e.g. useful function to read hex file!
+------------------------------------------------------------------------------
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -5,13 +12,13 @@ use ieee.numeric_std.all;
 library std;
 use std.textio.all;
 
-use work.my1core85_pack.all;
+use work.my1core85pack.all;
 
-package my1core85_sim is
+package my1core85sim is
 
-	constant DataBits : integer := DATABITS;
-	constant AddrBits : integer := ADDRBITS;
-	constant FullSize : integer := 2**ADDRBITS;
+	constant DataBits : integer := DATASIZE;
+	constant AddrBits : integer := ADDRSIZE;
+	constant FullSize : integer := 2**ADDRSIZE;
 
 	type Nibble is array (DataBits/2-1 downto 0) of std_logic;
 	type ByteData is array (DataBits-1 downto 0) of std_logic;
@@ -22,13 +29,12 @@ package my1core85_sim is
 	end record;
 	type Memory is array (0 to FullSize-1) of MemLoc;
 	procedure init_memory ( CodeMemory: out Memory );
-	procedure insert_memory ( StartAddr: in WordData; 
-		MemSize: in integer; CodeMemory: out Memory );
-	procedure read_file_hex ( HexFile: in string; CodeMemory: out Memory );
+	procedure insert_memory ( StartAddr: in WordData; MemSize: in integer; CodeMemory: out Memory );
+	procedure read_file_hex ( FileName: in string; CodeMemory: out Memory );
 
 end package;
 
-package body my1core85_sim is
+package body my1core85sim is
 
 	function hexchar2nibble ( hexchar : character ) return Nibble is 
 		variable retval: Nibble;
@@ -68,26 +74,26 @@ package body my1core85_sim is
 		MemSize: in integer; CodeMemory: out Memory ) is
 		variable CheckBeg, CheckEnd: integer;
 	begin
-		CheckBeg := to_integer(StartAddr);
+		CheckBeg := to_integer(unsigned(StartAddr));
 		CheckEnd := (CheckBeg + MemSize) - 1;
-		assert cCheckBeg < FullSize and CheckEnd < FullSize
-			report "Memory Out of Valid Range (" &
-				CheckBeg & "-" & CheckEnd & ")!"
+		assert (CheckBeg < FullSize and CheckEnd < FullSize)
+			report "Memory: Out of Valid Range (" & CheckBeg & "-" & CheckEnd & ")!"
 			severity failure;
-		for index in cCheckBeg to cCheckEnd loop
+		for index in CheckBeg to CheckEnd loop
 			CodeMemory(index).Flag := '1';
 		end loop;
-	end check_memory;
+	end insert_memory;
 
-	procedure read_file_hex ( filename: in string; CodeMemory: out Memory ) is
+	procedure read_file_hex ( FileName: in string; CodeMemory: out Memory ) is
 		variable checkline: line;
 		variable testchar: character;
 		variable read_ok, file_ok: boolean;
+		variable tmp1_read, tmp2_read: Nibble;
 		variable checksum, checkval: ByteData;
 		variable byte_count, byte_rectype: ByteData;
 		variable byte_addr: WordData;
 		variable temp_count, code_addr: integer;
-		FILE hexfile: TEXT IS IN filename;
+		FILE hexfile: TEXT IS IN FileName;
 	begin
 		file_ok := false;
 		while not endfile(hexfile) loop
@@ -102,14 +108,14 @@ package body my1core85_sim is
 			-- get byte count (usu. 0x10 or 0x20)
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
-			byte_count(3 downto 0) := hexchar2nibble(testchar);
+			tmp1_read := hexchar2nibble(testchar);
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
-			byte_count(7 downto 4) := hexchar2nibble(testchar);
+			tmp2_read := hexchar2nibble(testchar);
+			byte_count := tmp1_read & tmp2_read;
 			temp_count := to_integer(unsigned(byte_count));
 			checkval := byte_count;
-			checksum := std_logic_vector(
-				unsigned(checksum) + unsigned(checkval) );
+			checksum := std_logic_vector(unsigned(checksum)+unsigned(checkval));
 			-- get address
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
@@ -177,4 +183,4 @@ package body my1core85_sim is
 		assert file_ok report "Invalid Intel HEX format?!!" severity error;
 	end read_file_hex;
 
-end my1core85_sim;
+end my1core85sim;

@@ -8,7 +8,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
-package my1core85_pack is
+package my1core85pack is
 
 	constant ADDRSIZE: integer := 16;
 	constant DATASIZE: integer := 8;

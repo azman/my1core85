@@ -10,7 +10,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use work.my1core85_pack.all; 
+use work.my1core85pack.all; 
 
 entity my1core85ctrl is
 	port
@@ -20,7 +20,7 @@ entity my1core85ctrl is
 	);
 end my1core85ctrl;
 
-architecture behavioral of my1core85ctrl is
+architecture structural of my1core85ctrl is
 
 	signal curr_state, next_state: proc_state_type := init_state;
 	type ctrl_data_type is record
@@ -204,4 +204,4 @@ begin
 		end if;
 	end process sequ_proc;
 
-end behavioral;
+end structural;
