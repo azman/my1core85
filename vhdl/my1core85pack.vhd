@@ -24,8 +24,8 @@ package my1core85pack is
 		MEMORY_WRITE, IO_READ, IO_WRITE, INTR_ACK,
 		BUS_IDLE );
 
-	constant init_state: proc_state_type := STATE_R; -- reset state
-	constant init_cycle: mach_cycle_type := OPCODE_FETCH;
+	constant INIT_STATE: proc_state_type := STATE_R; -- reset state
+	constant INIT_CYCLE: mach_cycle_type := OPCODE_FETCH;
 
 	type my1core85inst_input is record
 		reg_clk: std_logic;
@@ -54,7 +54,7 @@ package my1core85pack is
 		enb_ireg: std_logic;
 	end record;
 
-	constant zero_inst: my1core85inst_output := ( '0', '0', '0', '0', '0',
+	constant ZERO_INST: my1core85inst_output := ( '0', '0', '0', '0', '0',
 		"00", "00", "111", "111" );
 
 end package;

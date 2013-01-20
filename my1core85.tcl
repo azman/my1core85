@@ -1,4 +1,4 @@
-# Created using ISE WebPack 12.1
+# ISE WebPack 12.1
 
 set projectName			"my1core85"
 set myProject			"${projectName}.xise"
@@ -21,7 +21,7 @@ set core_files [ list \
 ]
 
 set tb_files [ list \
-	"my1core85_sim.vhd" \
+	"my1core85sim.vhd" \
 	"my1core85_tb.vhd" \
 ]
 

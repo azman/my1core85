@@ -16,27 +16,26 @@ use work.my1core85pack.all;
 
 package my1core85sim is
 
-	constant DataBits : integer := DATASIZE;
-	constant AddrBits : integer := ADDRSIZE;
-	constant FullSize : integer := 2**ADDRSIZE;
+	constant TOTALMEM : integer := 2**ADDRSIZE;
 
-	type Nibble is array (DataBits/2-1 downto 0) of std_logic;
-	type ByteData is array (DataBits-1 downto 0) of std_logic;
-	type WordData is array (DataBits*2-1 downto 0) of std_logic;
+	type Nibble is array (DATASIZE/2-1 downto 0) of std_logic;
+	type ByteData is array (DATASIZE-1 downto 0) of std_logic;
+	type WordData is array (DATASIZE*2-1 downto 0) of std_logic;
 	type MemLoc is record
-		Data: ByteData;
-		Flag: std_logic;
+		data: ByteData;
+		flag: std_logic;
 	end record;
-	type Memory is array (0 to FullSize-1) of MemLoc;
-	procedure init_memory ( CodeMemory: out Memory );
-	procedure insert_memory ( StartAddr: in WordData; MemSize: in integer; CodeMemory: out Memory );
-	procedure read_file_hex ( FileName: in string; CodeMemory: out Memory );
+	type Memory is array (0 to TOTALMEM-1) of MemLoc;
+	procedure init_memory (sysmem: out Memory);
+	procedure insert_memory (initaddr: in WordData; memsize: in integer;
+		sysmem: out Memory);
+	procedure read_file_hex (filename: in string; sysmem: out Memory);
 
 end package;
 
 package body my1core85sim is
 
-	function hexchar2nibble ( hexchar : character ) return Nibble is 
+	function hexchar2nibble (hexchar : character) return Nibble is 
 		variable retval: Nibble;
 	begin
 		case hexchar is
@@ -62,38 +61,40 @@ package body my1core85sim is
 		return retval;
 	end hexchar2nibble;
 
-	procedure init_memory ( CodeMemory: out Memory ) is
+	procedure init_memory (sysmem: out Memory) is
 	begin
-		for index in 0 to FullSize-1 loop
-			CodeMemory(index).Flag := '0';
-			CodeMemory(index).Data := x"00";
+		for index in 0 to TOTALMEM-1 loop
+			sysmem(index).flag := '0';
+			sysmem(index).data := x"00";
 		end loop;
 	end init_memory;
 
-	procedure insert_memory ( StartAddr: in WordData; 
-		MemSize: in integer; CodeMemory: out Memory ) is
-		variable CheckBeg, CheckEnd: integer;
+	procedure insert_memory (initaddr: in WordData; memsize: in integer;
+			sysmem: out Memory) is
+		variable checkbeg, checkend: integer;
+		variable errmsg: string;
 	begin
-		CheckBeg := to_integer(unsigned(StartAddr));
-		CheckEnd := (CheckBeg + MemSize) - 1;
-		assert (CheckBeg < FullSize and CheckEnd < FullSize)
-			report "Memory: Out of Valid Range (" & CheckBeg & "-" & CheckEnd & ")!"
-			severity failure;
-		for index in CheckBeg to CheckEnd loop
-			CodeMemory(index).Flag := '1';
+		checkbeg := to_integer(unsigned(initaddr));
+		checkend := (checkbeg + memsize) - 1;
+		assert checkbeg < TOTALMEM and checkend < TOTALMEM
+			report "Memory: Invalid Range (" & integer'image(checkbeg) &
+				"-" & integer'image(checkend) & ")!" severity failure;
+		for index in checkbeg to checkend loop
+			sysmem(index).flag := '1';
 		end loop;
 	end insert_memory;
 
-	procedure read_file_hex ( FileName: in string; CodeMemory: out Memory ) is
+	procedure read_file_hex (filename: in string; sysmem: out Memory) is
 		variable checkline: line;
 		variable testchar: character;
 		variable read_ok, file_ok: boolean;
 		variable tmp1_read, tmp2_read: Nibble;
+		variable tmp3_read, tmp4_read: Nibble;
 		variable checksum, checkval: ByteData;
-		variable byte_count, byte_rectype: ByteData;
+		variable byte_rectype: ByteData;
 		variable byte_addr: WordData;
-		variable temp_count, code_addr: integer;
-		FILE hexfile: TEXT IS IN FileName;
+		variable byte_count, code_addr: integer;
+		FILE hexfile: TEXT IS IN filename;
 	begin
 		file_ok := false;
 		while not endfile(hexfile) loop
@@ -112,26 +113,24 @@ package body my1core85sim is
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
 			tmp2_read := hexchar2nibble(testchar);
-			byte_count := tmp1_read & tmp2_read;
-			temp_count := to_integer(unsigned(byte_count));
-			checkval := byte_count;
+			checkval := tmp1_read & tmp2_read;
+			byte_count := to_integer(unsigned(checkval));
 			checksum := std_logic_vector(unsigned(checksum)+unsigned(checkval));
 			-- get address
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
-			byte_addr(3 downto 0) := hexchar2nibble(testchar);
+			tmp1_read := hexchar2nibble(testchar);
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
-			byte_addr(7 downto 4) := hexchar2nibble(testchar);
-			checkval := byte_addr(7 downto 0);
-			checksum := std_logic_vector(
-				unsigned(checksum) + unsigned(checkval) );
+			tmp2_read := hexchar2nibble(testchar);
+			checkval := tmp1_read & tmp2_read;
+			checksum := std_logic_vector(unsigned(checksum)+unsigned(checkval));
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
-			byte_addr(11 downto 8) := hexchar2nibble(testchar);
+			tmp3_read := hexchar2nibble(testchar);
 			read(checkline,testchar,read_ok);
 			assert read_ok report "Read Failed!" severity failure;
-			byte_addr(15 downto 12) := hexchar2nibble(testchar);
+			tmp4_read := hexchar2nibble(testchar);
 			code_addr := to_integer(unsigned(byte_addr));
 			checkval := byte_addr(15 downto 8);
 			checksum := std_logic_vector(
@@ -151,7 +150,7 @@ package body my1core85sim is
 				report "Record Type: Not supported type!"
 				severity error;
 			-- get byte_count data
-			for index in 0 to temp_count-1 loop
+			for index in 0 to byte_count-1 loop
 				read(checkline,testchar,read_ok);
 				assert read_ok report "Read Failed!" severity failure;
 				checkval(3 downto 0) := hexchar2nibble(testchar);
@@ -160,10 +159,10 @@ package body my1core85sim is
 				checkval(7 downto 4) := hexchar2nibble(testchar);
 				checksum := std_logic_vector(
 					unsigned(checksum) + unsigned(checkval) );
-				assert CodeMemory(code_addr).Flag = '1'
+				assert sysmem(code_addr).Flag = '1'
 					report "Invalid Memory Location!"
 					severity failure;
-				CodeMemory(code_addr).Data := checkval;
+				sysmem(code_addr).Data := checkval;
 				code_addr := code_addr + 1;
 			end loop;
 			-- do checksum
