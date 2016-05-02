@@ -1,0 +1,20 @@
+----------
+my1vloglib
+----------
+
+My personal collection (library?) of reusable Verilog HDL codes.
+
+ModelSim Notes:
+
+- to start working, create a work library
+  = command: vlib <lib-name>
+  = <lib-name> is usually work
+- to compile Verilog source
+  = command: vlog <source-file>
+  = wildcards acceptable e.g. vlog register*
+- to run simulation without waveform viewer
+  = command: vsim -c <lib-name>.module
+
+Disclaimer:
+
+Feel free to use the code(s) available here at your own risk :)
