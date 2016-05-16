@@ -3,14 +3,15 @@
 -- Function: Timing and Control Unit
 -- Comment:
 -- == state machine in here...
--- == based on the timing diagram, states change on falling edge!
 -- == make the registers clock on rising edge!
+-- == based on the timing diagram, states change on falling edge!
+--    == or use CLK_ signal for state machine! ( WE USE THIS!)
 ------------------------------------------------------------------------------
 
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use work.my1core85pack.all; 
+use work.my1core85pack.all;
 
 entity my1core85ctrl is
 	port
@@ -33,7 +34,7 @@ architecture structural of my1core85ctrl is
 	end record;
 	constant init_data: ctrl_data_type := ( init_cycle, zero_inst, '0',
 		"011", -- status bits
-		'1', '1', -- rd/wr active low, 
+		'1', '1', -- rd/wr active low,
 		'0','0', '0' ); -- ale high pulse!
 	signal curr_data, next_data: ctrl_data_type := init_data;
 	signal chk_last, go_write, go_iochk: std_logic;
@@ -60,7 +61,7 @@ begin
 	go_iochk <= '1' when curr_data.chk_inst.do_data /= "00" and
 		curr_data.chk_inst.go_io = '1' else '0';
 
-	comb_proc : process( curr_state, port_in ) is -- combinational
+	comb_ctrl : process( curr_state, port_in ) is -- combinational
 		variable temp_state: proc_state_type;
 		variable temp_data: ctrl_data_type;
 	begin
@@ -181,24 +182,20 @@ begin
 				temp_data.out_hlda := '1';
 			end if;
 		when others =>
-			-- do nothing???
+			-- do nothing??? or, go halt?
 		end case;
-		-- reset overrides all!
-		if port_in.pin_rst = '0' then -- active low??
-			temp_state := STATE_R;
-		end if;
 		next_state <= temp_state;
 		next_data <= temp_data;
 	end process comb_proc;
 
-	sequ_proc : process ( port_in.sys_clk ) is -- sequential
+	time_ctrl : process ( port_in.sys_clk ) is -- sequential
 	begin
 		if port_in.pin_rst = '0' then -- async reset, active low
 			-- should remain low for 10ms after min vcc
 			-- 3 clock cycles for correct reset operation?
 			curr_state <= init_state;
 			curr_data <= init_data;
-		elsif falling_edge(port_in.sys_clk) then -- state change on -ve edge!
+		elsif rising_edge(port_in.sys_clk) then
 			curr_state <= next_state;
 			curr_data <= next_data;
 		end if;

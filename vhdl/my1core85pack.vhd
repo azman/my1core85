@@ -34,11 +34,11 @@ package my1core85pack is
 	end record;
 
 	type my1core85inst_output is record
-		go_read, go_write, go_io: std_logic;
-		go_halt, go_extd: std_logic;
+		go_read, go_write, go_io: std_logic; -- pins RD_, WR_, IO/M_
+		go_halt, go_extd: std_logic; -- signal halt state, 6-T opcode
 		do_arg: std_logic_vector(1 downto 0);
 		do_data: std_logic_vector(1 downto 0);
-		tgt_src, tgt_dst: std_logic_vector(2 downto 0);
+		tgt_src, tgt_dst: std_logic_vector(2 downto 0); -- 8-bit reg src/dst
 	end record;
 
 	type my1core85ctrl_input is record
