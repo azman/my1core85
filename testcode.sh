@@ -14,6 +14,10 @@ VSIM_LOG="vlog.log"
 VSIM_OPT="-c -keepstdout -l $VSIM_LOG"
 SEL_CODE="$1"
 ONE_TIME="NO"
+KEEP_LIB="NO"
+
+# check if requested override for library cleanup
+[ "$(echo $@|grep -- '--keep-lib')" != "" ] && KEEP_LIB="YES"
 
 # make sure target path is available
 [ "$VSRCPATH" == "" ] && VSRCPATH="$(pwd)"
@@ -104,21 +108,30 @@ for code in $codes ; do
 	# run simulation
 	echo -n "    Running testbench simulation... "
 	${VSIMPATH}/${VSIMEXEC} ${VSIM_OPT} work.$bench -do "run -all" &>$VSIM_LOG
-	echo "completed! [$?]"
-	echo "$(cat $VSIM_LOG|grep -e '# \[')"
+	VSIM_RES=$?
+	echo "completed! [$VSIM_RES]"
+	if [ $VSIM_RES -eq 0 ] ; then
+		echo "$(cat $VSIM_LOG|grep -e '# \[')"
+	else
+		echo "$(cat $VSIM_LOG)"
+	fi
 	echo "    Done checking module '$check'."
 	if [ "$ONE_TIME" != "YES" ] ; then
 		read -n 1 -p "Press any key to continue..." dummy
 		echo
 	fi
-	# removes compiled library - in case same name with the next
-	${VSIMPATH}/${VDELEXEC} $check
-	${VSIMPATH}/${VDELEXEC} $bench
+	if [ "$KEEP_LIB" == "NO" ] ; then
+		# removes compiled library - in case same name with the next
+		${VSIMPATH}/${VDELEXEC} $check
+		${VSIMPATH}/${VDELEXEC} $bench
+	fi
 	# remove log
 	rm -rf $VSIM_LOG
 done
 
-# clean up compiler work path
-echo -n "Removing work path for compiler... "
-[ -d $VSIMWORK ] && rm -rf $VSIMWORK
-echo "done!"
+if [ "$KEEP_LIB" == "NO" ] ; then
+	# clean up compiler work path
+	echo -n "Removing work path for compiler... "
+	[ -d $VSIMWORK ] && rm -rf $VSIMWORK
+	echo "done!"
+fi
