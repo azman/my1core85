@@ -30,6 +30,7 @@ end
 
 //generate stimuli
 always begin
+	$display("[%04g] Testing tri-state buffer module...", $time);
 	data_in = {MYSIZE{1'b1}};
 	chk_state;
 	enable = 1'b1;

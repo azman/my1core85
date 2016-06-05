@@ -12,7 +12,7 @@ initial
 begin
 	// test 1-hot
 	oZ = 1; // only LSB 1, the rest should be zero
-	$display("1-HOT Encoding... %b",oZ);
+	$display("[%3g] 1-HOT Encoding... %b",$time,oZ);
 	$display("[%3g] Start test for %g-%g decoder...",$time, MYSIZE, OPSIZE);
 	for (loop=0;loop<OPSIZE;loop=loop+1)
 	begin
@@ -26,7 +26,7 @@ begin
 	$display("[%3g] End test.",$time);
 	// test 1-cold
 	oZ = 1; // only LSB 1, the rest should be zero
-	$display("1-COLD Encoding... %b",~oZ);
+	$display("[%3g] 1-COLD Encoding... %b",$time,~oZ);
 	$display("[%3g] Start test for %g-%g decoder...",$time, MYSIZE, OPSIZE);
 	for (loop=0;loop<OPSIZE;loop=loop+1)
 	begin
