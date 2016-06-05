@@ -14,6 +14,7 @@ ModelSim Notes:
   = wildcards acceptable e.g. vlog register*
 - to run simulation without waveform viewer
   = command: vsim -c <lib-name>.module
+  = add '-do "run -all"' to skip simulation prompt
 
 Disclaimer:
 
