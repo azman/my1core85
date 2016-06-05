@@ -2,7 +2,8 @@
 my1vloglib
 ----------
 
-My personal collection (library?) of reusable Verilog HDL codes.
+My personal collection (library?) of reusable Verilog HDL codes. Also included
+a bash shell script which can be used to run Modelsim's Verilog simulator.
 
 Module Notes:
 
