@@ -10,7 +10,6 @@ wire[MYSIZE-1:0] data_out;
 
 task reg_data;
 	input[MYSIZE-1:0] data;
-	integer loop;
 	begin
 		$display("[%04g] Register data {%h}", $time,data);
 		data_in = data;

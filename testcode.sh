@@ -15,9 +15,13 @@ VSIM_OPT="-c -keepstdout -l $VSIM_LOG"
 SEL_CODE="$1"
 ONE_TIME="NO"
 KEEP_LIB="NO"
+KEEP_LOG="NO"
 
 # check if requested override for library cleanup
 [ "$(echo $@|grep -- '--keep-lib')" != "" ] && KEEP_LIB="YES"
+
+# check if requested override for log deletion
+[ "$(echo $@|grep -- '--keep-log')" != "" ] && KEEP_LOG="YES"
 
 # make sure target path is available
 [ "$VSRCPATH" == "" ] && VSRCPATH="$(pwd)"
@@ -126,7 +130,7 @@ for code in $codes ; do
 		${VSIMPATH}/${VDELEXEC} $bench
 	fi
 	# remove log
-	rm -rf $VSIM_LOG
+	[ "$KEEP_LOG" == "NO" ] && rm -rf $VSIM_LOG
 done
 
 if [ "$KEEP_LIB" == "NO" ] ; then
