@@ -6,10 +6,10 @@ parameter REGBIT = 3;
 parameter RCOUNT = 2**REGBIT;
 parameter MYSTEP = MYSIZE/4;
 
-reg clk, rst, wrenb, r1enb, r2enb;
+reg clk, rst, wrenb, flenb, r1enb, r2enb;
 reg[REGBIT-1:0] waddr, r1add, r2add;
-reg[MYSIZE-1:0] wdata;
-wire[MYSIZE-1:0] r1dat, r2dat;
+reg[MYSIZE-1:0] wdata, ifdat;
+wire[MYSIZE-1:0] r1dat, r2dat, ofdat;
 
 task reg_write;
 	input[REGBIT-1:0] addr;
@@ -23,6 +23,19 @@ task reg_write;
 		if (r1dat===data) $display("[OK]");
 		else $display("[ERROR!]");
 		#(1*MYCLKP); r1enb = 1'b0;
+	end
+endtask
+
+task reg_flag_update;
+	input[MYSIZE-1:0] data;
+	begin
+		$display("[%04g] Updating flag {%h}", $time,data);
+		ifdat = data;
+		#(1*MYCLKP); flenb = 1'b1;
+		#(1*MYCLKP); flenb = 1'b0;
+		$write("[%04g] Checking flag : {%h} => ", $time,ofdat);
+		if (ofdat===data) $display("[OK]");
+		else $display("[ERROR!]");
 	end
 endtask
 
@@ -51,6 +64,8 @@ endtask
 // reset stuffs
 initial begin
 	clk = 1'b0; rst = 1'b0;
+	wrenb = 1'b0; flenb = 1'b0;
+	r1enb = 1'b0; r2enb = 1'b0;
 	#(5*MYCLKP) rst = 1'b1;
 	#(5*MYCLKP) rst = 1'b0;
 end
@@ -71,11 +86,15 @@ always begin
 	reg_print;
 	reg_write(3'b001,{MYSTEP{4'h5}});
 	reg_print;
+	reg_flag_update({MYSTEP{4'ha}});
+	reg_print;
+	reg_flag_update({MYSTEP{4'h5}});
+	reg_print;
 	$finish;
 end
 
 defparam dut.DATASIZE = MYSIZE;
-registerfile dut (clk, rst, wrenb, r1enb, r2enb,
-	waddr, r1add, r2add, wdata, r1dat, r2dat);
+registerfile dut (clk, rst, wrenb, flenb, r1enb, r2enb,
+	waddr, r1add, r2add, wdata, ifdat, r1dat, r2dat, ofdat);
 
 endmodule
