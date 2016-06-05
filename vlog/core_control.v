@@ -1,4 +1,4 @@
-module stmach (clk, rst, code, ipin, opin);
+module control (clk, rst, code, ipin, opin);
 
 parameter DATASIZE=8;
 parameter STATE_TR=4'b0000; // reset state
