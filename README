@@ -4,6 +4,12 @@ my1vloglib
 
 My personal collection (library?) of reusable Verilog HDL codes.
 
+Module Notes:
+
+- decoder
+  = using generate statements to automate assignments
+  = took me a while but i figured it out (have to use >2-input gate)
+
 ModelSim Notes:
 
 - to start working, create a work library
