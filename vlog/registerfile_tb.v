@@ -76,7 +76,7 @@ always #(MYCLKP/2) clk = !clk;
 //generate stimuli
 always begin
 	$display("[%04g] Testing registerfile module...", $time);
-	#(10*MYCLKP)
+	#(10*MYCLKP);
 	reg_print;
 	reg_write(3'b000,{MYSTEP{4'ha}});
 	reg_print;
