@@ -1,15 +1,19 @@
 module registerfile ( clk, rst, wrenb, flenb, r1enb, r2enb,
 	waddr, r1add, r2add, wdata, ifdat, r1dat, r2dat, ofdat );
 
-parameter DATASIZE=8;
-parameter ADDRSIZE=3;
-parameter REGCOUNT=2**ADDRSIZE;
-parameter REG_FLAG=6;
+// general purpose register block
+// - with two read ports and one write port
+// - special interface for a flag register (8085-specific)
 
-input clk, rst, wrenb, flenb, r1enb, r2enb;
+parameter DATASIZE = 8;
+parameter ADDRSIZE = 3;
+parameter REGCOUNT = 2**ADDRSIZE;
+parameter REG_FLAG = REGCOUNT-2; // this is 8085-specific
+
+input clk, rst, wrenb, flenb, r1enb, r2enb; // flenb = 8085 specific
 input[ADDRSIZE-1:0] waddr, r1add, r2add;
-input[DATASIZE-1:0] wdata, ifdat; // special flag input
-output[DATASIZE-1:0] r1dat, r2dat, ofdat;
+input[DATASIZE-1:0] wdata, ifdat; // ifdat = 8085 specific
+output[DATASIZE-1:0] r1dat, r2dat, ofdat; // ofdat = 8085 specific
 wire[DATASIZE-1:0] r1dat, r2dat, ofdat;
 
 wire[DATASIZE-1:0] tdata[REGCOUNT-1:0],ddata[REGCOUNT-1:0];

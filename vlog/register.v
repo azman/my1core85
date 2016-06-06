@@ -1,6 +1,6 @@
 module register ( clk, rst, enb, data_in, data_out );
 
-parameter DATASIZE=8;
+parameter DATASIZE = 8;
 
 input clk, rst, enb;
 input[DATASIZE-1:0] data_in;

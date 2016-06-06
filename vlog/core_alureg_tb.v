@@ -1,11 +1,11 @@
 module alureg_tb ();
 
-parameter MYSIZE = 8;
-parameter MYCLKP = 10;
-parameter REGBIT = 3;
-parameter RCOUNT = 2**REGBIT;
-parameter DODATA = 0;
-parameter DOCODE = 1;
+parameter DATASIZE = 8;
+parameter CLKPTIME = 10;
+parameter ADDRSIZE = 3;
+parameter REGCOUNT = 2**ADDRSIZE;
+parameter DO_DATA = 0;
+parameter DO_CODE = 1;
 parameter ALU_ADD = 3'b000;
 parameter ALU_ADC = 3'b001;
 parameter ALU_SUB = 3'b010;
@@ -24,17 +24,17 @@ parameter REG_M = 3'b110;
 parameter REG_A = 3'b111;
 
 reg clk, iENC, iEND, iRRD, iRWR;
-reg[MYSIZE-1:0] iCOD, iDAT;
+reg[DATASIZE-1:0] iCOD, iDAT;
 
 task reg_data;
 	input iscode;
-	input[MYSIZE-1:0] data;
+	input[DATASIZE-1:0] data;
 	begin
 		if (iscode) $display("[%04g] Issue code {%h}", $time,data);
 		else $display("[%04g] Issue data {%h}", $time,data);
 		iDAT = data;
-		#(1*MYCLKP); if (iscode) iENC = 1'b1; else iEND = 1'b1;
-		#(1*MYCLKP); iENC = 1'b0; iEND = 1'b0;
+		#(1*CLKPTIME); if (iscode) iENC = 1'b1; else iEND = 1'b1;
+		#(1*CLKPTIME); iENC = 1'b0; iEND = 1'b0;
 		if (iscode) begin
 			$write("[%04g] Checking code {%h} => ", $time,
 				dut.inst_reg.data_out);
@@ -68,43 +68,43 @@ task reg_print;
 endtask
 
 task code_mvi;
-	input[REGBIT-1:0] reg_;
-	input[MYSIZE-1:0] data;
-	reg[MYSIZE-1:0] code;
+	input[ADDRSIZE-1:0] reg_;
+	input[DATASIZE-1:0] data;
+	reg[DATASIZE-1:0] code;
 	begin
 		code = { 2'b01,reg_,3'b110 };
-		reg_data(DOCODE,code);
-		reg_data(DODATA,data);
-		#(1*MYCLKP); iRRD = 1'b1;
-		#(1*MYCLKP); iRWR = 1'b1;
-		#(1*MYCLKP); iRWR = 1'b0; iRRD = 1'b0;
+		reg_data(DO_CODE,code);
+		reg_data(DO_DATA,data);
+		#(1*CLKPTIME); iRRD = 1'b1;
+		#(1*CLKPTIME); iRWR = 1'b1;
+		#(1*CLKPTIME); iRWR = 1'b0; iRRD = 1'b0;
 		$display("[%04g] MVI operation completed.",$time);
 	end
 endtask
 
 task code_alu;
 	input[2:0] opr_;
-	input[REGBIT-1:0] reg_;
-	reg[MYSIZE-1:0] code;
+	input[ADDRSIZE-1:0] reg_;
+	reg[DATASIZE-1:0] code;
 	begin
 		code = { 2'b10,opr_,reg_ };
-		reg_data(DOCODE,code);
-		#(1*MYCLKP); iRRD = 1'b1;
-		#(1*MYCLKP); iRWR = 1'b1;
-		#(1*MYCLKP); iRWR = 1'b0;
+		reg_data(DO_CODE,code);
+		#(1*CLKPTIME); iRRD = 1'b1;
+		#(1*CLKPTIME); iRWR = 1'b1;
+		#(1*CLKPTIME); iRWR = 1'b0;
 		$display("[%04g] ALU operation completed.",$time);
 	end
 endtask
 
 task code_mov;
-	input[REGBIT-1:0] reg2,reg1;
-	reg[MYSIZE-1:0] code;
+	input[ADDRSIZE-1:0] reg2,reg1;
+	reg[DATASIZE-1:0] code;
 	begin
 		code = { 2'b01,reg2,reg1 };
-		reg_data(DOCODE,code);
-		#(1*MYCLKP); iRRD = 1'b1;
-		#(1*MYCLKP); iRWR = 1'b1;
-		#(1*MYCLKP); iRWR = 1'b0;
+		reg_data(DO_CODE,code);
+		#(1*CLKPTIME); iRRD = 1'b1;
+		#(1*CLKPTIME); iRWR = 1'b1;
+		#(1*CLKPTIME); iRWR = 1'b0;
 		$display("[%04g] MOV operation completed.",$time);
 	end
 endtask
@@ -112,16 +112,16 @@ endtask
 // reset stuffs
 initial begin
 	clk = 1'b0; iENC = 1'b0; iEND = 1'b0;
-	iRRD = 1'b0; iRWR = 1'b0; #(MYCLKP*2);
+	iRRD = 1'b0; iRWR = 1'b0; #(CLKPTIME*2);
 end
 
 // generate clock
-always #(MYCLKP/2) clk = !clk;
+always #(CLKPTIME/2) clk = !clk;
 
 //generate stimuli
 always begin
 	$display("[%04g] Testing core ALU_REG module...", $time);
-	#(MYCLKP*4);
+	#(CLKPTIME*4);
 	reg_print;
 	code_mvi(REG_A,8'b10101010);
 	reg_print;
@@ -134,7 +134,7 @@ always begin
 	$finish;
 end
 
-defparam dut.MYSIZE = MYSIZE;
+defparam dut.DATASIZE = DATASIZE;
 alureg dut (clk,iENC,iEND,iRRD,iRWR,iDAT);
 
 endmodule

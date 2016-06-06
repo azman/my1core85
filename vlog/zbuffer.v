@@ -1,6 +1,6 @@
 module zbuffer ( enable, idata, odata );
 
-parameter DATASIZE=8;
+parameter DATASIZE = 8;
 
 input enable;
 input[DATASIZE-1:0] idata;

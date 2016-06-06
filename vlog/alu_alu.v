@@ -1,11 +1,11 @@
 module alu ( iS, iA, iB, iF, oY, oF );
 
-parameter DATASIZE=8;
-parameter FLAG_S=7;
-parameter FLAG_Z=6;
-parameter FLAG_A=4;
-parameter FLAG_P=2;
-parameter FLAG_C=0;
+parameter DATASIZE = 8;
+parameter FLAG_S = 7;
+parameter FLAG_Z = 6;
+parameter FLAG_A = 4;
+parameter FLAG_P = 2;
+parameter FLAG_C = 0;
 
 input[2:0] iS;
 input[DATASIZE-1:0] iA, iB, iF;

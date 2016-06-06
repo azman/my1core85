@@ -1,21 +1,21 @@
 module logic_tb ();
 
-parameter MYSIZE=8;
+parameter DATASIZE = 8;
 
 reg[1:0] iS; // 00=AND, 01=XOR, 10=OR, 11=PASS
-reg[MYSIZE-1:0] iA, iB, tY;
-wire[MYSIZE-1:0] oY;
+reg[DATASIZE-1:0] iA, iB, tY;
+wire[DATASIZE-1:0] oY;
 
 integer numA, numB, numC, ecnt;
 
 initial begin
-	$display("[%3g] Start test for %g-bit logic...",$time,MYSIZE);
+	$display("[%3g] Start test for %g-bit logic...",$time,DATASIZE);
 	ecnt = 0;
 	for (numC=0;numC<4;numC=numC+1) begin
 		iS = numC;
-		for (numA=0;numA<2**MYSIZE;numA=numA+1) begin
+		for (numA=0;numA<2**DATASIZE;numA=numA+1) begin
 			iA = numA;
-			for (numB=0;numB<2**MYSIZE;numB=numB+1) begin
+			for (numB=0;numB<2**DATASIZE;numB=numB+1) begin
 				iB = numB;
 				#10;
 				case (iS)
@@ -59,7 +59,7 @@ initial begin
 	$finish;
 end
 
-defparam dut.DATASIZE=MYSIZE;
+defparam dut.DATASIZE = DATASIZE;
 logic dut (iS,iA,iB,oY);
 
 endmodule

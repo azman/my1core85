@@ -1,7 +1,7 @@
 module sub8b ( iJ, iK, iB, oD, oB, oP);
 
-parameter DATASIZE=8;
-parameter USE_EXTB=0; // option to use external borrow
+parameter DATASIZE = 8;
+parameter USE_EXTB = 0; // option to use external borrow
 
 input[DATASIZE-1:0] iJ, iK, iB;
 output[DATASIZE-1:0] oD, oB, oP;

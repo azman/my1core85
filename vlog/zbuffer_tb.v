@@ -1,15 +1,15 @@
 module zbuffer_tb ();
 
-parameter MYSIZE = 4;
-parameter MYCLKP = 10;
+parameter DATASIZE = 4;
+parameter CLKPTIME = 10;
 
 reg enable;
-reg[MYSIZE-1:0] data_in;
-wire[MYSIZE-1:0] data_out;
+reg[DATASIZE-1:0] data_in;
+wire[DATASIZE-1:0] data_out;
 
 task chk_state;
 	begin
-		#(1*MYCLKP); // let everything settle down
+		#(1*CLKPTIME); // let everything settle down
 		$write("[%04g] Idata={%b}, Odata={%b}, enable={%b} => ",
 			$time,data_in,data_out,enable);
 		if (enable==1) begin
@@ -17,7 +17,7 @@ task chk_state;
 			else $display("[OK!]");
 		end
 		else begin
-			if (data_out!=={MYSIZE{1'bz}}) $display("[ERROR]");
+			if (data_out!=={DATASIZE{1'bz}}) $display("[ERROR]");
 			else $display("[OK!]");
 		end
 	end
@@ -31,18 +31,18 @@ end
 //generate stimuli
 always begin
 	$display("[%04g] Testing tri-state buffer module...", $time);
-	data_in = {MYSIZE{1'b1}};
+	data_in = {DATASIZE{1'b1}};
 	chk_state;
 	enable = 1'b1;
 	chk_state;
-	data_in = {MYSIZE{1'b0}};
+	data_in = {DATASIZE{1'b0}};
 	chk_state;
 	enable = 1'b0;
 	chk_state;
 	$finish;
 end
 
-defparam dut.DATASIZE = MYSIZE;
+defparam dut.DATASIZE = DATASIZE;
 zbuffer dut (enable, data_in, data_out);
 
 endmodule

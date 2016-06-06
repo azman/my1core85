@@ -1,36 +1,36 @@
 module control (clk, rst, code, ipin, opin);
 
-parameter DATASIZE=8;
-parameter STATE_TR=4'b0000; // reset state
-parameter STATE_T1=4'b0001; // state 1
-parameter STATE_T2=4'b0010; // state 2
-parameter STATE_T3=4'b0011; // state 3
-parameter STATE_T4=4'b0100; // state 4
-parameter STATE_T5=4'b0101; // state 5
-parameter STATE_T6=4'b0110; // state 6
-parameter STATE_TH=4'b0111; // hold state
-parameter STATE_TW=4'b1000; // wait state
-parameter STATE_TT=4'b1001; // halt state
-parameter STAT_OF=3'b011; // opcode fetch
-parameter STAT_MW=3'b001; // memory write
-parameter STAT_MR=3'b010; // memory read
-parameter STAT_DW=3'b101; // device write
-parameter STAT_DR=3'b110; // device read
-parameter STAT_INTA=3'b111; // interrupt acknowledge
-parameter STAT_HALT=3'bz00; // halt
-parameter STAT_HRST=3'bzxx; // hold/reset
-parameter IPIN_READY=0;
-parameter IPIN_HOLD=1;
-parameter IPIN_COUNT=2;
-parameter OPIN_S0=0;
-parameter OPIN_S1=1;
-parameter OPIN_IOM_=2;
-parameter OPIN_HLDA=3;
-parameter OPIN_RD_=4;
-parameter OPIN_WR_=5;
-parameter OPIN_INTA_=6;
-parameter OPIN_ALE=7;
-parameter OPIN_COUNT=8;
+parameter DATASIZE = 8;
+parameter STATE_TR = 4'b0000; // reset state
+parameter STATE_T1 = 4'b0001; // state 1
+parameter STATE_T2 = 4'b0010; // state 2
+parameter STATE_T3 = 4'b0011; // state 3
+parameter STATE_T4 = 4'b0100; // state 4
+parameter STATE_T5 = 4'b0101; // state 5
+parameter STATE_T6 = 4'b0110; // state 6
+parameter STATE_TH = 4'b0111; // hold state
+parameter STATE_TW = 4'b1000; // wait state
+parameter STATE_TT = 4'b1001; // halt state
+parameter STAT_OF = 3'b011; // opcode fetch
+parameter STAT_MW = 3'b001; // memory write
+parameter STAT_MR = 3'b010; // memory read
+parameter STAT_DW = 3'b101; // device write
+parameter STAT_DR = 3'b110; // device read
+parameter STAT_INTA = 3'b111; // interrupt acknowledge
+parameter STAT_HALT = 3'bz00; // halt
+parameter STAT_HRST = 3'bzxx; // hold/reset
+parameter IPIN_READY = 0;
+parameter IPIN_HOLD = 1;
+parameter IPIN_COUNT = 2;
+parameter OPIN_S0 = 0;
+parameter OPIN_S1 = 1;
+parameter OPIN_IOM_ = 2;
+parameter OPIN_HLDA = 3;
+parameter OPIN_RD_ = 4;
+parameter OPIN_WR_ = 5;
+parameter OPIN_INTA_ = 6;
+parameter OPIN_ALE = 7;
+parameter OPIN_COUNT = 8;
 
 input clk,rst;
 input[DATASIZE-1:0] code; // code from Instruction Register
@@ -147,7 +147,7 @@ begin
 			end
 		end
 		STATE_T3: begin
-			if (~fmc) begin
+			if (fmc) begin
 				nstate <= STATE_T4;
 			end
 			else begin
@@ -180,9 +180,9 @@ begin
 			end
 		end
 		STATE_TT: begin
-			if (ipin[IPIN_HOLD]) then
+			if (ipin[IPIN_HOLD]) begin
 				nstate <= STATE_TH;
-			end if;
+			end
 		end
 	endcase
 end

@@ -1,6 +1,6 @@
 module logic ( iS, iA, iB, oY);
 
-parameter DATASIZE=8;
+parameter DATASIZE = 8;
 
 input[1:0] iS; // 00=AND, 01=XOR, 10=OR, 11=PASS
 input[DATASIZE-1:0] iA, iB;
