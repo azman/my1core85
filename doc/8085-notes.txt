@@ -7,6 +7,9 @@ instruction set, but some design decisions will differ (e.g. data/address
 bus will no longer be multiplexed - not working on 'drop-in' replacement!)
 because we no longer have the limitations that the original designers had.
 
+Note: try to implement the multiplexed addr/data bus before moving on to
+custom design.
+
 PINS
 ----
 
@@ -39,49 +42,9 @@ PINS
 2-Register Pair HL
 3-Register Pair SP
 
+-------------
+General Notes
+-------------
 
-STATE MACHINE I/P
------------------
-
-RESET
-
-
-STATE MACHINE O/P
------------------
-
-EN_EXTD  = TS + TP
-LATCH_OP = TP
-CLR_PC   = TP
-EN_IR    = T1
-RESET    = T2
-EN_PC    = T2
-RD       = T3 + T4
-WR       = T4
-LOAD_PC  = T4
-AUWR_EN  = T6
-
-
-CONTROL CIRCUIT O/P
--------------------
-
-RAM_WR		= I[LDR].WR
-RAM_RD		= I[STR].RD
-REG_WR		= (I[STA]+I[STO]).WR
-REG_RD		= (I[LDA]+I[LDO]).RD
-PC_WR		= (I[JMP]+I[JB]+I[JNB]).WR
-ACC_RD		= ((I[STA]+(I[LDR].!ARG0))+(I[MATH].!(ARG0+ARG1))).RD
-ACC_WR		= (I[LDA]+(I[STR].!ARG0)).WR
-OPR_RD		= (I[STO]+(I[LDR].ARG0)).RD
-OPR_WR		= (I[LDO]+(I[STR].ARG0)).WR
-CNTR_RD		= (I[INC].ARG0).RD
-CNT_RST		= (I[INC].!ARG0).RD
-STAT_RD		= I[GETS].RD
-AU_RD		= I[MATH].RD
-PCH_WR		= I[LDPC].WR
-TX_RD		= I[TX].RD
-DONE		= I[GEN].(ARG0.ARG1)
-EXT_ADD_RD	= (I[GEN].!ARG0).RD
-INT_ADD_RD	= (I[GEN].ARG0).RD
-PC_JMP		= I[JMP]+(I[JNB].!FLAG)+(I[JB].FLAG)
-SEL_RX		= I[RX].WR
-AU_CY		= I[MATH].(ARG0+ARG1)
+- RESET_IN_ should remain low for 10ms after min vcc
+  = 3 clock cycles for correct reset operation
