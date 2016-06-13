@@ -1,4 +1,4 @@
-module alu ( iS, iA, iB, iF, oY, oF );
+module alu (iS, iA, iB, iF, oY, oF);
 
 parameter DATASIZE = 8;
 parameter FLAG_S = 7;

@@ -1,4 +1,4 @@
-module logic ( iS, iA, iB, oY);
+module logic (iS, iA, iB, oY);
 
 parameter DATASIZE = 8;
 

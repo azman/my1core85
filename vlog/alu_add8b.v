@@ -1,4 +1,4 @@
-module add8b ( iA, iB, iC, oS, oC, oP);
+module add8b (iA, iB, iC, oS, oC, oP);
 
 parameter DATASIZE = 8;
 parameter USE_EXTC = 0; // option to use external carry

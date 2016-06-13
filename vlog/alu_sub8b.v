@@ -1,4 +1,4 @@
-module sub8b ( iJ, iK, iB, oD, oB, oP);
+module sub8b (iJ, iK, iB, oD, oB, oP);
 
 parameter DATASIZE = 8;
 parameter USE_EXTB = 0; // option to use external borrow
@@ -11,15 +11,14 @@ wire[DATASIZE-1:0] tP, tB;
 
 genvar index;
 
+assign tB[0] = iB[0];
 generate
-if (USE_EXTB==0) begin : extb_block
-	assign tB[0] = iB;
-	for (index=1;index<DATASIZE;index=index+1) begin
+for (index=1;index<DATASIZE;index=index+1) begin : brw_block
+	if (USE_EXTB==0) begin
 		assign tB[index] = oB[index-1];
+	end else begin
+		assign tB[index] = iB[index];
 	end
-end
-else begin
-	assign tB = iB;
 end
 endgenerate
 

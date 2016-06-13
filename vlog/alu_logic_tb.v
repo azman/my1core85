@@ -59,7 +59,6 @@ initial begin
 	$finish;
 end
 
-defparam dut.DATASIZE = DATASIZE;
-logic dut (iS,iA,iB,oY);
+logic #(DATASIZE) dut (iS,iA,iB,oY);
 
 endmodule

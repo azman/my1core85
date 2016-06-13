@@ -1,4 +1,4 @@
-module sub1b ( iJ, iK, iB, oD, oB, oP);
+module sub1b (iJ, iK, iB, oD, oB, oP);
 
 input iJ, iK, iB;
 output oP, oB, oD;

@@ -1,4 +1,4 @@
-module add1b ( iA, iB, iC, oS, oC, oP);
+module add1b (iA, iB, iC, oS, oC, oP);
 
 input iA, iB, iC;
 output oP, oC, oS;

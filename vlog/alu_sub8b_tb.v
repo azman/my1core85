@@ -40,7 +40,6 @@ initial begin
 	$finish;
 end
 
-defparam dut.DATASIZE = DATASIZE;
-sub8b dut (iJ,iK,iB,oD,oB,oP);
+sub8b #(DATASIZE) dut (iJ,iK,iB,oD,oB,oP);
 
 endmodule
