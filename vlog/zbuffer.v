@@ -1,4 +1,4 @@
-module zbuffer ( enable, idata, odata );
+module zbuffer (enable, idata, odata);
 
 parameter DATASIZE = 8;
 

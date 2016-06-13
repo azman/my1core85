@@ -1,22 +1,22 @@
 module register_tb ();
 
-parameter DATASIZE = 4; // must be multiple of 4 to allow proper auto-config
+parameter DATASIZE = 4; // must be multiple of 4 to allow 'auto-config'
 parameter CLKPTIME = 10;
 parameter STEPSIZE = DATASIZE/4;
 
 reg clk, rst, enb;
-reg[DATASIZE-1:0] data_in;
-wire[DATASIZE-1:0] data_out;
+reg[DATASIZE-1:0] idata;
+wire[DATASIZE-1:0] odata;
 
 task reg_data;
 	input[DATASIZE-1:0] data;
 	begin
 		$display("[%04g] Register data {%h}", $time,data);
-		data_in = data;
+		idata = data;
 		#(1*CLKPTIME); enb = 1'b1;
 		#(1*CLKPTIME); enb = 1'b0;
-		$write("[%04g] Checking data {%h} => ", $time,data_out);
-		if (data_out==data) $display("[OK]");
+		$write("[%04g] Checking data {%h} => ", $time,odata);
+		if (odata==data) $display("[OK]");
 		else $display("[ERROR!]");
 	end
 endtask
@@ -24,7 +24,7 @@ endtask
 // reset stuffs
 initial begin
 	clk = 1'b0; rst = 1'b0;
-	enb = 1'b0; data_in = {STEPSIZE{4'h0}};
+	enb = 1'b0; idata = {STEPSIZE{4'h0}};
 	#(1*CLKPTIME) rst = 1'b0;
 	#(5*CLKPTIME) rst = 1'b1;
 	#(5*CLKPTIME) rst = 1'b0;
@@ -41,7 +41,6 @@ always begin
 	$finish;
 end
 
-defparam dut.DATASIZE = DATASIZE;
-register dut (clk, rst, enb, data_in, data_out);
+register #(DATASIZE) dut (clk, rst, enb, idata, odata);
 
 endmodule

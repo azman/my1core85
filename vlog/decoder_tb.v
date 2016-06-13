@@ -41,10 +41,7 @@ begin
 	$finish;
 end
 
-defparam dut.SEL_SIZE = DATASIZE;
-decoder dut ( iS, oY);
-defparam d2t.SEL_SIZE = DATASIZE;
-defparam d2t.ONE_COLD = 1;
-decoder d2t ( iS, oX);
+decoder #(.SEL_SIZE(DATASIZE)) dut ( iS, oY);
+decoder #(.SEL_SIZE(DATASIZE),.ONE_COLD(1))  d2t ( iS, oX);
 
 endmodule

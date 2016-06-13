@@ -42,7 +42,6 @@ always begin
 	$finish;
 end
 
-defparam dut.DATASIZE = DATASIZE;
-zbuffer dut (enable, data_in, data_out);
+zbuffer #(DATASIZE) dut (enable, data_in, data_out);
 
 endmodule
