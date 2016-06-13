@@ -12,6 +12,7 @@ VSIMPATH="$(which $VLOGEXEC 2>/dev/null)"
 VSIMWORK="work"
 VSIM_LOG="vlog.log"
 VSIM_OPT="-c -keepstdout -l $VSIM_LOG"
+VLOG_OPT="-vlog95compat"
 ONE_TIME="NO"
 DO_CLEAN="NO"
 SKIPTEST="NO"
@@ -47,6 +48,7 @@ while [ "$1" != "" ]; do
 				[ -f $check ] && comps="$comps $check"
 			done
 			;;
+		--new) VLOG_OPT="" ;;
 		--component)
 			shift
 			check=$(echo $lcode|grep "$1")
@@ -70,7 +72,7 @@ while [ "$1" != "" ]; do
 done
 
 # if no module file specified, terminate?
-[ $count -eq 0 ] && echo "No module specified? Aborting!" && exit 1
+[ $count -eq 0 ] && echo "Module(s) NOT specified/found? Aborting!" && exit 1
 
 # check one-file option?
 [ $count -eq 1 ] && ONE_TIME="YES"
@@ -86,8 +88,13 @@ function get_module_name()
 	local code="$1"
 	local count=$(cat $code|grep -e '^[[:space:]]*module')
 	local check=$(echo $count|sed -e 's/^.*module\s*\(\S*\)\s*(.*$/\1/')
-	count=$(echo $count|sed -e 's/^.*module.*(\(.*\)).*$/\1/'|tr -cd ,|wc -c)
-	((count++))
+	count=$(echo $count|sed -e 's/^.*module.*(\s*\(.*\)\s*).*$/\1/')
+	if [ "$count" == "" ] ; then
+		count=0
+	else
+		count=$(echo $count|tr -cd ,|wc -c)
+		((count++))
+	fi
 	echo "$check:$count"
 }
 
@@ -99,7 +106,7 @@ function do_compile()
 	[ "${code//_tb.v/}" != "${code}" ] && type="testbench"
 	# try to compile
 	echo -n "    Checking $type for sim-ready... "
-	${VSIMPATH}/${VLOGEXEC} $code >$VSIM_LOG
+	${VSIMPATH}/${VLOGEXEC} ${VLOG_OPT} $code >$VSIM_LOG
 	if [ $? -eq 0 ] ; then
 		echo "done!"
 		what=0
@@ -153,7 +160,7 @@ done
 # do your thing...
 for code in $codes ; do
 	# ignore testbench
-	[ "${code//_tb.v/}" != "${code}" ] && continue
+	#[ "${code//_tb.v/}" != "${code}" ] && continue
 	file=$(basename $code)
 	info=$(get_module_name $code)
 	name=${info%:*}
