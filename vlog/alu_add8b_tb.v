@@ -39,7 +39,7 @@ initial begin
 	$finish;
 end
 
-defparam dut.DATASIZE = DATASIZE;
-add8b dut (iA,iB,iC,oS,oC,oP);
+//defparam dut.DATASIZE = DATASIZE; // verilog95 also accepts # block
+add8b #(DATASIZE) dut (iA,iB,iC,oS,oC,oP);
 
 endmodule

@@ -9,17 +9,16 @@ wire[DATASIZE-1:0] oS, oC, oP;
 
 wire[DATASIZE-1:0] tP, tC;
 
-genvar index;
+genvar index; // generate is only available in verilog2001
 
+assign tC[0] = iC[0]; // always external carry in
 generate
-if (USE_EXTC==0) begin : extc_block
-	assign tC[0] = iC;
-	for (index=1;index<DATASIZE;index=index+1) begin
+for (index=1;index<DATASIZE;index=index+1) begin : cry_block
+	if (USE_EXTC==0) begin
 		assign tC[index] = oC[index-1];
+	end else begin
+		assign tC[index] = iC[index];
 	end
-end
-else begin
-	assign tC = iC;
 end
 endgenerate
 
