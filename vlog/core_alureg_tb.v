@@ -38,14 +38,14 @@ task reg_data;
 		#(1*CLKPTIME); enb_code = 1'b0; enb_data = 1'b0;
 		if (iscode) begin
 			$write("[%04g] Checking code {%h} => ", $time,
-				dut.inst_reg.data_out);
-			if (dut.inst_reg.data_out===data) $display("[OK]");
+				dut.inst_reg.odata);
+			if (dut.inst_reg.odata===data) $display("[OK]");
 			else $display("[ERROR!]");
 		end
 		else begin
 			$write("[%04g] Checking data {%h} => ", $time,
-				dut.temp_reg.data_out);
-			if (dut.temp_reg.data_out===data) $display("[OK]");
+				dut.temp_reg.odata);
+			if (dut.temp_reg.odata===data) $display("[OK]");
 			else $display("[ERROR!]");
 		end
 	end
@@ -54,17 +54,11 @@ endtask
 task reg_print;
 	begin
 		$write("[%04g] Registers [I:%h] [T:%h] ", $time,
-			dut.inst_reg.data_out,dut.temp_reg.data_out);
+			dut.inst_reg.odata,dut.temp_reg.odata);
 		$write("[B:%h] [C:%h] [D:%h] [E:%h] ",
-			dut.reg_block.reg_block[0].regs.data_out,
-			dut.reg_block.reg_block[1].regs.data_out,
-			dut.reg_block.reg_block[2].regs.data_out,
-			dut.reg_block.reg_block[3].regs.data_out);
+			dut.qdata[0], dut.qdata[1], dut.qdata[2], dut.qdata[3]);
 		$display("[H:%h] [L:%h] [F:%h] [A:%h]",
-			dut.reg_block.reg_block[4].regs.data_out,
-			dut.reg_block.reg_block[5].regs.data_out,
-			dut.reg_block.reg_block[6].regs.data_out,
-			dut.reg_block.reg_block[7].regs.data_out);
+			dut.qdata[4], dut.qdata[5], dut.qdata[6], dut.qdata[7]);
 	end
 endtask
 
@@ -114,7 +108,7 @@ endtask
 initial begin
 	clk = 1'b0; enb_code = 1'b0; enb_data = 1'b0;
 	enb_rreg = 1'b0; enb_wreg = 1'b0; #(CLKPTIME*2);
-	$monitor("[%04g] {DAD,GO6}={%b}",$time,chk_inst);
+	$monitor("[%04g] CHK_INST={%b}",$time,chk_inst);
 end
 
 // generate clock
@@ -125,12 +119,16 @@ always begin
 	$display("[%04g] Testing core ALU_REG module...", $time);
 	#(CLKPTIME*4);
 	reg_print;
+	$display("[%04g] Executing: MVI A, %bb",$time,8'b10101010);
 	code_mvi(REG_A,8'b10101010);
 	reg_print;
+	$display("[%04g] Executing: MOV B, A",$time);
 	code_mov(REG_B,REG_A);
 	reg_print;
+	$display("[%04g] Executing: XRA A",$time);
 	code_alu(ALU_XOR,REG_A);
 	reg_print;
+	$display("[%04g] Executing: MOV C, A",$time);
 	code_mov(REG_C,REG_A);
 	reg_print;
 	$finish;
