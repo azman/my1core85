@@ -1,5 +1,4 @@
-module alureg ( clk, enb_code, enb_data, enb_rreg, enb_wreg,
-	bus_d, chk_inst );
+module alureg (clk, enb_code, enb_data, enb_rreg, enb_wreg, bus_d, chk_inst);
 
 parameter DATASIZE = 8;
 //parameter PAIRSIZE = DATASIZE*2;

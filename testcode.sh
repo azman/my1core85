@@ -86,9 +86,11 @@ echo "done!"
 function get_module_name()
 {
 	local code="$1"
-	local count=$(cat $code|grep -e '^[[:space:]]*module')
-	local check=$(echo $count|sed -e 's/^.*module\s*\(\S*\)\s*(.*$/\1/')
-	count=$(echo $count|sed -e 's/^.*module.*(\s*\(.*\)\s*).*$/\1/')
+	local count=$(cat $code|sed -ne '/^\s*module\s*.*(.*)\s*;\s*$/ p')
+	[ "$count" == "" ] &&
+		count=$(cat $code|sed -ne '/^\s*module\s*.*(/,/[)].*[;]/ p')
+	local check=$(echo $count|sed -e 's/^\s*module\s*\(\S*\)\s*(.*/\1/')
+	count=$(echo $count|sed -e 's/^\s*module\s*(\s*\(.*\)\s*)\s*;\s*/\1/')
 	if [ "$count" == "" ] ; then
 		count=0
 	else
