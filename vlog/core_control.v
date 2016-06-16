@@ -64,10 +64,10 @@ wire[OPIN_COUNT-1:0] opin;
 // internal registers
 reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
 reg[6:0] stactl; // stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}
+reg is_bimc, is_last, is_init;
+// output logic - used in always block
 reg pin_ale, pin_ia_, pin_wr_, pin_rd_, pin_im_, pin_sta;
 reg enb_adh, enb_adl, enb_dat, enb_ctl;
-// status registers
-reg is_bimc, is_last, is_init;
 
 // drive enb port with internal registers
 assign oenb[OENB_ADDL] = enb_adl;
@@ -76,164 +76,139 @@ assign oenb[OENB_DATA] = enb_dat;
 // direct reg to pin
 assign opin[OPIN_S0] = pin_sta | stactl[STAT_S0];
 assign opin[OPIN_S1] = pin_sta | stactl[STAT_S1];
-assign opin[OPIN_IOM_] = enb_ctl ? 1'bz : pin_im_ & stactl[STAT_IOM_];
-assign opin[OPIN_RD_] = enb_ctl ? 1'bz : pin_rd_ | stactl[CTRL_RD_];
-assign opin[OPIN_WR_] = enb_ctl ? 1'bz : pin_wr_ | stactl[CTRL_WR_];
+assign opin[OPIN_IOM_] = enb_ctl ? pin_im_ & stactl[STAT_IOM_] : 1'bz;
+assign opin[OPIN_RD_] = enb_ctl ? pin_rd_ | stactl[CTRL_RD_] : 1'bz;
+assign opin[OPIN_WR_] = enb_ctl ? pin_wr_ | stactl[CTRL_WR_] : 1'bz;
 assign opin[OPIN_INTA_] = pin_ia_ | stactl[CTRL_INTA_];
 assign opin[OPIN_ALE] = pin_ale;
 
-// output logic
-always @(posedge clk_) begin
-	if(rst_ == 1) begin // actually active low
-		stactl <= CYCLE_OF;
-		pin_ale <= 1'b0;
-		pin_ia_ <= 1'b1;
-		pin_wr_ <= 1'b0;
-		pin_rd_ <= 1'b0;
-		pin_im_ <= 1'b1;
-		pin_sta <= 1'b0;
-		enb_adh <= 1'b0;
-		enb_adl <= 1'b0;
-		enb_dat <= 1'b0;
-		enb_ctl <= 1'b0;
-		is_bimc <= 1'b0;
-		is_last <= 1'b0;
-		is_init <= 1'b1;
-	end else begin
-		case (cstate)
-			STATE_T1: begin
-				if (is_bimc|inst[INST_DAD]) //inst[INST_DAD] always bimc?
-					pin_ale <= 1'b0;
-				else
-					pin_ale <= 1'b1;
-				pin_ia_ <= 1'b1; // must be high
-				pin_wr_ <= 1'b1; // must be high
-				pin_rd_ <= 1'b1; // must be high
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b1;
-				enb_dat <= 1'b0;
-				enb_ctl <= 1'b1;
-			end
-			STATE_T2: begin
+// output logic - depends on state only
+always @(cstate) begin
+	case (cstate)
+		STATE_T1: begin
+			if (is_bimc|inst[INST_DAD]) //inst[INST_DAD] always bimc?
 				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b0; // depends on machine cycle
-				pin_wr_ <= 1'b0; // depends on machine cycle
-				pin_rd_ <= 1'b0; // depends on machine cycle
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b0;
-				enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
-				enb_ctl <= 1'b1;
-			end
-			STATE_TW: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b0; // depends on machine cycle
-				pin_wr_ <= 1'b0; // depends on machine cycle
-				pin_rd_ <= 1'b0; // depends on machine cycle
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b0;
-				enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
-				enb_ctl <= 1'b1;
-			end
-			STATE_T3: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b0; // depends on machine cycle
-				pin_wr_ <= 1'b0; // depends on machine cycle
-				pin_rd_ <= 1'b0; // depends on machine cycle
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b0;
-				enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
-				enb_ctl <= 1'b1;
-			end
-			STATE_T4: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b1; // must be high
-				pin_wr_ <= 1'b1; // must be high
-				pin_rd_ <= 1'b1; // must be high
-				pin_im_ <= 1'b0; // overrides status lines
-				pin_sta <= 1'b1; // overrides status lines
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b0; // high-z T4-T6
-				enb_dat <= 1'b0; // high-z T4-T6
-				enb_ctl <= 1'b1;
-				// check next machine cycle here?
-				is_bimc <= 1'b0;
-				is_last <= 1'b0;
-				is_init <= 1'b1;
-			end
-			STATE_T5: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b1; // must be high
-				pin_wr_ <= 1'b1; // must be high
-				pin_rd_ <= 1'b1; // must be high
-				pin_im_ <= 1'b0; // overrides status lines
-				pin_sta <= 1'b1; // overrides status lines
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b0; // high-z T4-T6
-				enb_dat <= 1'b0; // high-z T4-T6
-				enb_ctl <= 1'b1;
-			end
-			STATE_T6: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b1; // must be high
-				pin_wr_ <= 1'b1; // must be high
-				pin_rd_ <= 1'b1; // must be high
-				pin_im_ <= 1'b0; // overrides status lines
-				pin_sta <= 1'b1; // overrides status lines
-				enb_adh <= 1'b1; // always enable T1-T6
-				enb_adl <= 1'b0; // high-z T4-T6
-				enb_dat <= 1'b0; // high-z T4-T6
-				enb_ctl <= 1'b1;
-			end
-			STATE_TR: begin
-				stactl <= CYCLE_OF; // always reset to opcode fetch cycle
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b1;
-				pin_wr_ <= 1'b0;
-				pin_rd_ <= 1'b0;
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b0;
-				enb_adl <= 1'b0;
-				enb_dat <= 1'b0;
-				enb_ctl <= 1'b0;
-				is_bimc <= 1'b0;
-				is_last <= 1'b0;
-				is_init <= 1'b1;
-			end
-			STATE_TT: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b1;
-				pin_wr_ <= 1'b0;
-				pin_rd_ <= 1'b0;
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b0;
-				enb_adl <= 1'b0;
-				enb_dat <= 1'b0;
-				enb_ctl <= 1'b0;
-			end
-			STATE_TH: begin
-				pin_ale <= 1'b0;
-				pin_ia_ <= 1'b1;
-				pin_wr_ <= 1'b0;
-				pin_rd_ <= 1'b0;
-				pin_im_ <= 1'b1;
-				pin_sta <= 1'b0;
-				enb_adh <= 1'b0;
-				enb_adl <= 1'b0;
-				enb_dat <= 1'b0;
-				enb_ctl <= 1'b0;
-			end
-		endcase
-	end
+			else
+				pin_ale <= 1'b1;
+			pin_ia_ <= 1'b1; // must be high
+			pin_wr_ <= 1'b1; // must be high
+			pin_rd_ <= 1'b1; // must be high
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b1;
+			enb_dat <= 1'b0;
+			enb_ctl <= 1'b1;
+		end
+		STATE_T2: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b0; // depends on machine cycle
+			pin_wr_ <= 1'b0; // depends on machine cycle
+			pin_rd_ <= 1'b0; // depends on machine cycle
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b0;
+			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
+			enb_ctl <= 1'b1;
+		end
+		STATE_TW: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b0; // depends on machine cycle
+			pin_wr_ <= 1'b0; // depends on machine cycle
+			pin_rd_ <= 1'b0; // depends on machine cycle
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b0;
+			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
+			enb_ctl <= 1'b1;
+		end
+		STATE_T3: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b0; // depends on machine cycle
+			pin_wr_ <= 1'b0; // depends on machine cycle
+			pin_rd_ <= 1'b0; // depends on machine cycle
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b0;
+			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
+			enb_ctl <= 1'b1;
+		end
+		STATE_T4: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b1; // must be high
+			pin_wr_ <= 1'b1; // must be high
+			pin_rd_ <= 1'b1; // must be high
+			pin_im_ <= 1'b0; // overrides status lines
+			pin_sta <= 1'b1; // overrides status lines
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b0; // high-z T4-T6
+			enb_dat <= 1'b0; // high-z T4-T6
+			enb_ctl <= 1'b1;
+		end
+		STATE_T5: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b1; // must be high
+			pin_wr_ <= 1'b1; // must be high
+			pin_rd_ <= 1'b1; // must be high
+			pin_im_ <= 1'b0; // overrides status lines
+			pin_sta <= 1'b1; // overrides status lines
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b0; // high-z T4-T6
+			enb_dat <= 1'b0; // high-z T4-T6
+			enb_ctl <= 1'b1;
+		end
+		STATE_T6: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b1; // must be high
+			pin_wr_ <= 1'b1; // must be high
+			pin_rd_ <= 1'b1; // must be high
+			pin_im_ <= 1'b0; // overrides status lines
+			pin_sta <= 1'b1; // overrides status lines
+			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adl <= 1'b0; // high-z T4-T6
+			enb_dat <= 1'b0; // high-z T4-T6
+			enb_ctl <= 1'b1;
+		end
+		STATE_TR: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b1;
+			pin_wr_ <= 1'b0;
+			pin_rd_ <= 1'b0;
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b0;
+			enb_adl <= 1'b0;
+			enb_dat <= 1'b0;
+			enb_ctl <= 1'b0;
+		end
+		STATE_TT: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b1;
+			pin_wr_ <= 1'b0;
+			pin_rd_ <= 1'b0;
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b0;
+			enb_adl <= 1'b0;
+			enb_dat <= 1'b0;
+			enb_ctl <= 1'b0;
+		end
+		STATE_TH: begin
+			pin_ale <= 1'b0;
+			pin_ia_ <= 1'b1;
+			pin_wr_ <= 1'b0;
+			pin_rd_ <= 1'b0;
+			pin_im_ <= 1'b1;
+			pin_sta <= 1'b0;
+			enb_adh <= 1'b0;
+			enb_adl <= 1'b0;
+			enb_dat <= 1'b0;
+			enb_ctl <= 1'b0;
+		end
+	endcase
 end
 
 // next-state logic
@@ -302,8 +277,28 @@ end
 always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 	if(rst_ == 1) begin // actually active low
 		cstate <= STATE_TR;
+		// internal registers
+		stactl <= CYCLE_OF; // always reset to opcode fetch cycle
+		is_bimc <= 1'b0;
+		is_last <= 1'b0;
+		is_init <= 1'b1;
 	end else begin
 		cstate <= nstate;
+		case (nstate)
+			STATE_TR: begin
+				stactl <= CYCLE_OF;
+				is_bimc <= 1'b0;
+				is_last <= 1'b0;
+				is_init <= 1'b1;
+			end
+			STATE_T4: begin
+				// check next machine cycle here?
+				stactl <= CYCLE_OF;
+				is_bimc <= 1'b0;
+				is_last <= 1'b0;
+				is_init <= 1'b1;
+			end
+		endcase
 	end
 end
 
