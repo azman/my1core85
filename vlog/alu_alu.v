@@ -26,7 +26,7 @@ assign oY = iS[2] ? tL : tA;
 // these always updates accordingly
 assign oF[FLAG_S] = oY[FLAG_S]; // sign flag
 assign oF[FLAG_Z] = ~|oY; // zero flag
-assign oF[FLAG_P] = ~^oY; // odd-parity flag
+assign oF[FLAG_P] = ~^oY; // even-parity flag (1 if even 1's)
 // these depends on operations
 assign oF[FLAG_A] = iS[2] ? tACL : tACA; // auxiliary carry flag
 assign oF[FLAG_C] = iS[2] ? tCYL : tCYA; // carry flag
