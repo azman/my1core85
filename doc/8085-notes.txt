@@ -48,3 +48,17 @@ General Notes
 
 - RESET_IN_ should remain low for 10ms after min vcc
   = 3 clock cycles for correct reset operation
+
+----------------------
+Grep-ping instruction?
+----------------------
+
+- looking for instruction with six-state opcode fetch
+
+cat doc/8085-inst.csv | grep "^.*;.*;.*;.*;S.*;.*$"
+
+- looking for instruction with bus idle machine cycle
+
+cat doc/8085-inst.csv | grep "^.*;.*;.*;.*;.*B.*;.*$"
+
+- to count, simply append  " | wc -l"
