@@ -17,7 +17,8 @@ ONE_TIME="NO"
 DO_CLEAN="NO"
 SKIPTEST="NO"
 LIB_COMP="alu_add1b alu_add8b alu_sub1b alu_sub8b alu_logic alu_alu"
-LIB_COMP="${LIB_COMP} decoder zbuffer register"
+LIB_COMP="${LIB_COMP} decoder zbuffer register incdec"
+LIB_COMP="${LIB_COMP} core_alureg core_control"
 
 # make sure target path is available
 [ "$VSRCPATH" == "" ] && VSRCPATH="$(pwd)"
