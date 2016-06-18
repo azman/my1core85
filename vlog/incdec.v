@@ -1,6 +1,7 @@
 module incdec (iS, iA, oS, oF);
 
 parameter DATASIZE = 8;
+parameter FLAGSIZE = 8;
 parameter FLAG_S = 7;
 parameter FLAG_Z = 6;
 parameter FLAG_A = 4;
@@ -9,8 +10,10 @@ parameter FLAG_C = 0;
 
 input iS;
 input[DATASIZE-1:0] iA;
-output[DATASIZE-1:0] oS, oF;
+output[DATASIZE-1:0] oS;
+output[FLAGSIZE-1:0] oF;
 wire[DATASIZE-1:0] oS;
+wire[FLAGSIZE-1:0] oF;
 
 wire[DATASIZE-1:0] tS, tD;
 wire[DATASIZE:0] tC, tB;

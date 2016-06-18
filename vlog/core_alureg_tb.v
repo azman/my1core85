@@ -134,7 +134,6 @@ always begin
 	$finish;
 end
 
-defparam dut.DATASIZE = DATASIZE;
-alureg dut (clk,enb_code,enb_data,enb_rreg,enb_wreg,bus_data,chk_inst);
+alureg dut (clk,1'b1,enb_code,enb_data,enb_rreg,enb_wreg,bus_data,chk_inst);
 
 endmodule
