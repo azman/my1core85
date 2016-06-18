@@ -22,17 +22,27 @@ parameter CYCLE_INA = 6'b011111; // interrupt acknowledge
 parameter CYCLE_BID = 6'b111010; // bus idle - DAD (2 cycles?)
 parameter CYCLE_BIT = 6'b111111; // ack reset/trap
 parameter CYCLE_BIH = 6'b111100; // halt ; actually 6'b1zzz00
+parameter CYCLE_ERR = 6'b000000; // internal error
 parameter STAT_S0 = 0;
 parameter STAT_S1 = 1;
 parameter STAT_IOM_ = 2;
 parameter CTRL_RD_ = 3;
 parameter CTRL_WR_ = 4;
 parameter CTRL_INTA_ = 5;
+parameter STACTLSZ = 6;
 // these are from alureg
 parameter INST_GO6 = 0;
 parameter INST_DAD = 1;
 parameter INST_HLT = 2;
-parameter INSTSIZE = 3;
+parameter INST_DIO = 3;
+parameter INFO_CYC = 4; // 4-bits cycle info
+parameter INST_CYL = 4;
+parameter INST_CYH = 7;
+parameter INST_RWL = 8;
+parameter INST_RWH = 11;
+// 8-bit machine cycle info (4-11)
+parameter INST_CCC = 12; // condition flag
+parameter INSTSIZE = 13;
 // input pins
 parameter IPIN_READY = 0;
 parameter IPIN_HOLD = 1;
@@ -63,11 +73,23 @@ wire[OPIN_COUNT-1:0] opin;
 
 // internal registers
 reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
-reg[6:0] stactl; // stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}
-reg is_bimc, is_last, is_init;
+reg[STACTLSZ-1:0] stactl;
+reg isfirst;
+reg[INFO_CYC-1:0] do_more, dowrite;
 // output logic - used in always block
 reg pin_ale, pin_ia_, pin_wr_, pin_rd_, pin_im_, pin_sta;
 reg enb_adh, enb_adl, enb_dat, enb_ctl;
+// internal wiring (combinational logic)
+wire do_bimc, do_last, dofirst, do_memr, do_memw, do_devr, do_devw;
+
+// control logic
+assign do_bimc = (inst[INST_DAD]|inst[INST_HLT]);
+assign do_last = ~do_more[1]&do_more[0];
+assign dofirst = ~do_more[0];
+assign do_memr = ~dowrite[0]&~inst[INST_DIO];
+assign do_memw = dowrite[0]&~inst[INST_DIO];
+assign do_devr = ~dowrite[0]&inst[INST_DIO];
+assign do_devw = dowrite[0]&inst[INST_DIO];
 
 // drive enb port with internal registers
 assign oenb[OENB_ADDL] = enb_adl;
@@ -86,7 +108,7 @@ assign opin[OPIN_ALE] = pin_ale;
 always @(cstate) begin
 	case (cstate)
 		STATE_T1: begin
-			if (is_bimc|inst[INST_DAD]) //inst[INST_DAD] always bimc?
+			if (do_bimc|inst[INST_DAD]) //inst[INST_DAD] always bimc?
 				pin_ale <= 1'b0;
 			else
 				pin_ale <= 1'b1;
@@ -212,8 +234,7 @@ always @(cstate) begin
 end
 
 // next-state logic
-always @(cstate or inst or ipin or stactl or
-		is_bimc or is_last or is_init) begin
+always @(cstate or inst or ipin or stactl or do_bimc or isfirst) begin
 	nstate = cstate;
 	case (cstate)
 		STATE_TR: begin
@@ -227,14 +248,14 @@ always @(cstate or inst or ipin or stactl or
 			end
 		end
 		STATE_T2: begin
-			if (ipin[IPIN_READY]|is_bimc) begin
+			if (ipin[IPIN_READY]|do_bimc) begin
 				nstate = STATE_T3;
 			end else begin
 				nstate = STATE_TW;
 			end
 		end
 		STATE_T3: begin
-			if (is_init) begin
+			if (isfirst) begin
 				nstate = STATE_T4;
 			end else begin
 				nstate = STATE_T1;
@@ -254,7 +275,7 @@ always @(cstate or inst or ipin or stactl or
 			nstate = STATE_T1;
 		end
 		STATE_TW: begin
-			if (ipin[IPIN_READY]|is_bimc) begin
+			if (ipin[IPIN_READY]|do_bimc) begin
 				nstate = STATE_T3;
 			end
 		end
@@ -278,25 +299,75 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 	if(rst_ == 1) begin // actually active low
 		cstate <= STATE_TR;
 		// internal registers
-		stactl <= CYCLE_OF; // always reset to opcode fetch cycle
-		is_bimc <= 1'b0;
-		is_last <= 1'b0;
-		is_init <= 1'b1;
+		isfirst <= 1'b1;
+		do_more <= {INFO_CYC{1'b0}};
+		dowrite <= {INFO_CYC{1'b0}};
 	end else begin
 		cstate <= nstate;
+		// entry action
 		case (nstate)
 			STATE_TR: begin
-				stactl <= CYCLE_OF;
-				is_bimc <= 1'b0;
-				is_last <= 1'b0;
-				is_init <= 1'b1;
+				isfirst <= 1'b1;
+				do_more <= {INFO_CYC{1'b0}};
+				dowrite <= {INFO_CYC{1'b0}};
+			end
+			STATE_T1: begin
+				// update stactl on first state
+				// stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}
+				if (dofirst) begin
+					stactl <= CYCLE_OF; // first machine cycle opcode fetch
+				end else begin
+					case ({do_memr,do_memw,do_devr,do_devw})
+						4'b1000: stactl <= CYCLE_MR;
+						4'b0100: stactl <= CYCLE_MW;
+						4'b0010: stactl <= CYCLE_DR;
+						4'b0001: stactl <= CYCLE_DW;
+						default: begin
+							if (inst[INST_DAD]) begin
+								stactl <= CYCLE_BID;
+							end else if (inst[INST_HLT]) begin
+								stactl <= CYCLE_BIH;
+							end else begin
+								stactl <= CYCLE_ERR;
+							end
+						end
+					endcase
+				end
+			end
+			STATE_T3: begin
+				do_more <= do_more >> 1;
+				dowrite <= dowrite >> 1;
+				isfirst <= dofirst;
 			end
 			STATE_T4: begin
-				// check next machine cycle here?
-				stactl <= CYCLE_OF;
-				is_bimc <= 1'b0;
-				is_last <= 1'b0;
-				is_init <= 1'b1;
+				// assign next machine cycle here
+				if (~inst[INST_GO6]) begin
+					if (inst[INST_CYL]) begin
+						isfirst <= 1'b0;
+						do_more <= inst[INST_CYH:INST_CYL];
+						dowrite <= inst[INST_RWH:INST_RWL];
+					end else begin // no extended machine cycle - go op
+						stactl <= CYCLE_OF;
+						isfirst <= 1'b1;
+						// just in case, reset
+						//do_more <= {INFO_CYC{1'b0}};
+						//dowrite <= {INFO_CYC{1'b0}};
+					end
+				end
+			end
+			STATE_T6: begin
+				// assign next machine cycle here
+				if (inst[INST_CYL]) begin
+					isfirst <= 1'b0;
+					do_more <= inst[INST_CYH:INST_CYL];
+					dowrite <= inst[INST_RWH:INST_RWL];
+				end else begin // no extended machine cycle - go op
+					stactl <= CYCLE_OF;
+					isfirst <= 1'b1;
+					// just in case, reset
+					//do_more <= {INFO_CYC{1'b0}};
+					//dowrite <= {INFO_CYC{1'b0}};
+				end
 			end
 		endcase
 	end
