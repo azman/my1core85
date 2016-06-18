@@ -23,9 +23,10 @@ parameter REG_L = 3'b101;
 parameter REG_M = 3'b110;
 parameter REG_A = 3'b111;
 
-reg clk, enb_code, enb_data, enb_rreg, enb_wreg;
-reg[DATASIZE-1:0] bus_data;
-wire[dut.INSTSIZE-1:0] chk_inst;
+reg clk, rst, enb_c, enb_d, enbrr, enbwr;
+reg[DATASIZE-1:0] bus_d;
+wire[dut.INSTSIZE-1:0] chk_i;
+wire[DATASIZE*2-1:0] outpc;
 
 task reg_data;
 	input iscode;
@@ -33,9 +34,9 @@ task reg_data;
 	begin
 		if (iscode) $display("[%04g] Issue code {%h}", $time,data);
 		else $display("[%04g] Issue data {%h}", $time,data);
-		bus_data = data;
-		#(1*CLKPTIME); if (iscode) enb_code = 1'b1; else enb_data = 1'b1;
-		#(1*CLKPTIME); enb_code = 1'b0; enb_data = 1'b0;
+		bus_d = data;
+		#(1*CLKPTIME); if (iscode) enb_c = 1'b1; else enb_d = 1'b1;
+		#(1*CLKPTIME); enb_c = 1'b0; enb_d = 1'b0;
 		if (iscode) begin
 			$write("[%04g] Checking code {%h} => ", $time,
 				dut.inst_reg.odata);
@@ -70,9 +71,9 @@ task code_mvi;
 		code = { 2'b01,reg_,3'b110 };
 		reg_data(DO_CODE,code);
 		reg_data(DO_DATA,data);
-		#(1*CLKPTIME); enb_rreg = 1'b1;
-		#(1*CLKPTIME); enb_wreg = 1'b1;
-		#(1*CLKPTIME); enb_wreg = 1'b0; enb_rreg = 1'b0;
+		#(1*CLKPTIME); enbrr = 1'b1;
+		#(1*CLKPTIME); enbwr = 1'b1;
+		#(1*CLKPTIME); enbwr = 1'b0; enbrr = 1'b0;
 		$display("[%04g] MVI operation completed.",$time);
 	end
 endtask
@@ -84,9 +85,9 @@ task code_alu;
 	begin
 		code = { 2'b10,opr_,reg_ };
 		reg_data(DO_CODE,code);
-		#(1*CLKPTIME); enb_rreg = 1'b1;
-		#(1*CLKPTIME); enb_wreg = 1'b1;
-		#(1*CLKPTIME); enb_wreg = 1'b0;
+		#(1*CLKPTIME); enbrr = 1'b1;
+		#(1*CLKPTIME); enbwr = 1'b1;
+		#(1*CLKPTIME); enbwr = 1'b0;
 		$display("[%04g] ALU operation completed.",$time);
 	end
 endtask
@@ -97,18 +98,18 @@ task code_mov;
 	begin
 		code = { 2'b01,reg2,reg1 };
 		reg_data(DO_CODE,code);
-		#(1*CLKPTIME); enb_rreg = 1'b1;
-		#(1*CLKPTIME); enb_wreg = 1'b1;
-		#(1*CLKPTIME); enb_wreg = 1'b0;
+		#(1*CLKPTIME); enbrr = 1'b1;
+		#(1*CLKPTIME); enbwr = 1'b1;
+		#(1*CLKPTIME); enbwr = 1'b0;
 		$display("[%04g] MOV operation completed.",$time);
 	end
 endtask
 
 // reset stuffs
 initial begin
-	clk = 1'b0; enb_code = 1'b0; enb_data = 1'b0;
-	enb_rreg = 1'b0; enb_wreg = 1'b0; #(CLKPTIME*2);
-	$monitor("[%04g] CHK_INST={%b}",$time,chk_inst);
+	clk = 1'b0; rst = 1'b1; enb_c = 1'b0; enb_d = 1'b0;
+	enbrr = 1'b0; enbwr = 1'b0; #(CLKPTIME*2); rst = 1'b0;
+	$monitor("[%04g] CHK_I={%b} PC={%b}",$time,chk_i,outpc);
 end
 
 // generate clock
@@ -134,6 +135,6 @@ always begin
 	$finish;
 end
 
-alureg dut (clk,1'b1,enb_code,enb_data,enb_rreg,enb_wreg,bus_data,chk_inst);
+alureg dut (clk,rst,enb_c,enb_d,1'b1,enbrr,enbwr,bus_d,chk_i,outpc);
 
 endmodule

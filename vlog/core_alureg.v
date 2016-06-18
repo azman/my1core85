@@ -1,4 +1,5 @@
-module alureg (clk, rst_, enb_c, enb_d, enbrr, enbwr, bus_d, chk_i, outpc);
+module alureg (clk, rst_, enb_c, enb_d, enbpc, enbrr, enbwr,
+	bus_d, chk_i, outpc);
 
 parameter DATASIZE = 8;
 parameter PAIRSIZE = DATASIZE*2;
@@ -37,7 +38,7 @@ parameter INST_RWH = 11;
 parameter INST_CCC = 12; // condition flag
 parameter INSTSIZE = 13;
 
-input clk, rst_, enb_c, enb_d, enbrr, enbwr;
+input clk, rst_, enb_c, enb_d, enbpc, enbrr, enbwr;
 input[DATASIZE-1:0] bus_d;
 output[INSTSIZE-1:0] chk_i;
 output[ADDRSIZE-1:0] outpc;
@@ -260,7 +261,7 @@ register temp_reg (clk,1'b0,enb_d,bus_d,rtemp);
 decoder wrdec (waddr,bufwr);
 decoder rddec (raddr,bufrd);
 decoder rpdec (rpadd,bufrp);
-register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enb,pcinc,pcout);
+register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,pcinc,pcout);
 incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg);
 
 // alu block connections
