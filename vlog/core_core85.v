@@ -19,15 +19,26 @@ wire CLK_OUT, RST_OUT, IOM_, S1, S0, INTA_, WR_, RD_, ALE, HLDA, SOD;
 wire[ctrl.IPIN_COUNT-1:0] ipin;
 wire[ctrl.OENB_COUNT-1:0] oenb;
 wire[ctrl.OPIN_COUNT-1:0] opin;
-wire[DATASIZE-1:0] bus_d;
+wire[DATASIZE-1:0] bus_d, bus_q;
 wire[proc.INSTSIZE-1:0] chk_i;
-wire[ADDRSIZE-1:0] outpc;
+wire[ADDRSIZE-1:0] chk_a;
+wire enb_c,enb_d,enbpc,enbrr,enbwr;
 
+assign ADDR = oenb[ctrl.OENB_ADDH] ?
+	chk_a[ADDRSIZE-1:DATASIZE] : {DATASIZE{1'bz}};
+assign ADDRDATA = oenb[ctrl.OENB_ADDL] ?
+	chk_a[DATASIZE-1:0] : oenb[ctrl.OENB_DATA] ? bus_q : {DATASIZE{1'bz}};
 assign bus_d = (oenb[ctrl.OENB_ADDL]|oenb[ctrl.OENB_DATA]) ?
 	{DATASIZE{1'b0}} : ADDRDATA;
 // temporarily disabled?
 assign ipin[ctrl.IPIN_READY] = 1'b1; // always ready! READY;
 assign ipin[ctrl.IPIN_HOLD] = 1'b0; // no holding! HOLD;
+
+assign enbrr = oenb[ctrl.OENB_REGR];
+assign enbwr = oenb[ctrl.OENB_REGW];
+assign enb_c = oenb[ctrl.OENB_C_WR];
+assign enb_d = oenb[ctrl.OENB_D_WR];
+assign enbpc = oenb[ctrl.OENB_UPPC];
 
 // assign output pins
 assign CLK_OUT = CLK; // simply pass
@@ -44,6 +55,6 @@ assign HLDA = 1'b0;
 assign SOD = 1'b0;
 
 control ctrl (~CLK, ~RST_, chk_i, ipin, oenb, opin);
-alureg proc (CLK,~RST_,enb_c,enb_d,enbpc,enbrr,enbwr,bus_d,chk_i,outpc);
+alureg proc (CLK,~RST_,enb_c,enb_d,enbpc,enbrr,enbwr,bus_d,bus_q,chk_i,chk_a);
 
 endmodule

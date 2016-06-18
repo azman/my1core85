@@ -1,5 +1,5 @@
 module alureg (clk, rst_, enb_c, enb_d, enbpc, enb_r, enb_w,
-	bus_d, chk_i, outpc);
+	bus_d, bus_q, chk_i, chk_a);
 
 parameter DATASIZE = 8;
 parameter PAIRSIZE = DATASIZE*2;
@@ -41,10 +41,12 @@ parameter INSTSIZE = 13;
 
 input clk, rst_, enb_c, enb_d, enbpc, enb_r, enb_w;
 input[DATASIZE-1:0] bus_d;
+output[DATASIZE-1:0] bus_q;
 output[INSTSIZE-1:0] chk_i;
-output[ADDRSIZE-1:0] outpc;
+output[ADDRSIZE-1:0] chk_a;
+wire[DATASIZE-1:0] bus_q;
 wire[INSTSIZE-1:0] chk_i;
-wire[ADDRSIZE-1:0] outpc;
+wire[ADDRSIZE-1:0] chk_a;
 
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic;
@@ -224,7 +226,8 @@ always @(rinst) begin
 		3'b111: flags = qdata[REG_F][FLAGBITS]; // M
 	endcase
 end
-assign outpc = pcout; // program counter to drive address bus
+assign chk_a = pcout; // program counter to drive address bus
+assign bus_q = rtemp;
 
 // reg block connections
 assign mdata = mem_s ? rtemp : rdata; // if mem src, get from temp reg!
@@ -258,7 +261,7 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 	zbuffer buff (enbrd[index],qdata[index],rdata);
 end
 endgenerate
-register inst_reg (clk,1'b0,enb_c,bus_d,rinst);
+register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
 register temp_reg (clk,1'b0,enb_d,bus_d,rtemp);
 decoder wrdec (waddr,bufwr);
 decoder rddec (raddr,bufrd);

@@ -14,6 +14,9 @@ reg[DATASIZE-1:0] memory[(2**ADDRSIZE)-1:0];
 //integer loop;
 reg[ADDRSIZE-1:0] mem_addr;
 
+// memory read
+assign addrdata = (~rd_ & ~iom_) ? memory[mem_addr] : {DATASIZE{1'bz}};
+
 // reset block
 initial begin
 	$readmemh("memory.txt",memory);
@@ -23,8 +26,9 @@ initial begin
 	//end
 	clk = 1'b0; rst = 1'b1; // power-on reset
 	#(CLKPTIME*3) rst = 1'b0; // 3-clock cycle reset
-	$monitor("[%04g] STATE: %b {%b,%b}",$time/CLKPTIME,
-		dut.ctrl.cstate,dut.oenb,dut.opin);
+	$monitor("[%04g] STATE: %b {%b,%b} [%h][%h][%h][%b][%b]",$time/CLKPTIME,
+		dut.ctrl.cstate,dut.oenb,dut.opin,dut.proc.pcout,
+		addr,addrdata,dut.proc.rinst,dut.proc.rtemp);
 end
 
 // generate clock
@@ -41,7 +45,7 @@ end
 
 //generate stimuli
 always begin
-	#(CLKPTIME*20); $finish;
+	#(CLKPTIME*50); $finish;
 end
 
 core85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,

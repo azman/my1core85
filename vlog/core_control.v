@@ -51,7 +51,12 @@ parameter IPIN_COUNT = 2;
 parameter OENB_ADDL = 0;
 parameter OENB_ADDH = 1;
 parameter OENB_DATA = 2;
-parameter OENB_COUNT = 3;
+parameter OENB_REGR = 3;
+parameter OENB_REGW = 4;
+parameter OENB_C_WR = 5;
+parameter OENB_D_WR = 6;
+parameter OENB_UPPC = 7;
+parameter OENB_COUNT = 8;
 // direct ouput pins
 parameter OPIN_S0 = 0;
 parameter OPIN_S1 = 1;
@@ -95,6 +100,11 @@ assign do_devw = dowrite[0]&inst[INST_DIO];
 assign oenb[OENB_ADDL] = enb_adl;
 assign oenb[OENB_ADDH] = enb_adh;
 assign oenb[OENB_DATA] = enb_dat;
+assign oenb[OENB_REGR] = (cstate[2]|cstate[3]);
+assign oenb[OENB_REGW] = (cstate[3]&~isfirst);
+assign oenb[OENB_C_WR] = (cstate[3]&isfirst);
+assign oenb[OENB_D_WR] = (cstate[3]&~isfirst);
+assign oenb[OENB_UPPC] = (cstate[3]&~do_bimc);
 // direct reg to pin
 assign opin[OPIN_S0] = pin_sta | stactl[STAT_S0];
 assign opin[OPIN_S1] = pin_sta | stactl[STAT_S1];
