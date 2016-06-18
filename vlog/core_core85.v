@@ -16,16 +16,18 @@ wire[DATASIZE-1:0] ADDRDATA;
 wire[ADDRSIZE-1:DATASIZE] ADDR;
 wire CLK_OUT, RST_OUT, IOM_, S1, S0, INTA_, WR_, RD_, ALE, HLDA, SOD;
 
-wire[proc.IPIN_COUNT-1:0] ipin;
-wire[proc.OENB_COUNT-1:0] oenb;
+wire[ctrl.IPIN_COUNT-1:0] ipin;
+wire[ctrl.OENB_COUNT-1:0] oenb;
+wire[ctrl.OPIN_COUNT-1:0] opin;
 wire[DATASIZE-1:0] bus_d;
 wire[proc.INSTSIZE-1:0] chk_i;
+wire[ADDRSIZE-1:0] outpc;
 
-assign bus_d = (oenb[OENB_ADDL]|oenb[OENB_DATA]) ?
+assign bus_d = (oenb[ctrl.OENB_ADDL]|oenb[ctrl.OENB_DATA]) ?
 	{DATASIZE{1'b0}} : ADDRDATA;
 // temporarily disabled?
-assign ipin[proc.IPIN_READY] = 1'b1; // always ready! READY;
-assign ipin[proc.IPIN_HOLD] = 1'b0; // no holding! HOLD;
+assign ipin[ctrl.IPIN_READY] = 1'b1; // always ready! READY;
+assign ipin[ctrl.IPIN_HOLD] = 1'b0; // no holding! HOLD;
 
 // assign output pins
 assign CLK_OUT = CLK; // simply pass

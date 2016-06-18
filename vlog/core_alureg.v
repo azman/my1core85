@@ -1,10 +1,11 @@
-module alureg (clk, rst_, enb_c, enb_d, enbpc, enbrr, enbwr,
+module alureg (clk, rst_, enb_c, enb_d, enbpc, enb_r, enb_w,
 	bus_d, chk_i, outpc);
 
 parameter DATASIZE = 8;
 parameter PAIRSIZE = DATASIZE*2;
 parameter ADDRSIZE = 16;
 parameter REGSBITS = 3;
+parameter REGPBITS = REGSBITS-1;
 parameter REGCOUNT = 2**REGSBITS;
 parameter REG_B = 3'b000;
 parameter REG_C = 3'b001;
@@ -38,7 +39,7 @@ parameter INST_RWH = 11;
 parameter INST_CCC = 12; // condition flag
 parameter INSTSIZE = 13;
 
-input clk, rst_, enb_c, enb_d, enbpc, enbrr, enbwr;
+input clk, rst_, enb_c, enb_d, enbpc, enb_r, enb_w;
 input[DATASIZE-1:0] bus_d;
 output[INSTSIZE-1:0] chk_i;
 output[ADDRSIZE-1:0] outpc;
@@ -63,8 +64,9 @@ reg flags;
 wire[DATASIZE-1:0] wdata, rdata, mdata;
 wire[REGSBITS-1:0] waddr, raddr;
 wire wr_rr, rd_rr, wr_fl;
-wire[REGSBITS-2:0] rpadd; // register pair address
-wire[DATASIZE-1:0] pcinc, pcout, pcflg;
+wire[REGPBITS-1:0] rpadd; // register pair address
+wire[ADDRSIZE-1:0] pcinc, pcout;
+wire[DATASIZE-1:0] pcflg;
 // 'internals'
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0],qdata[REGCOUNT-1:0];
 wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd;
@@ -233,9 +235,9 @@ assign rpadd = rinst[5:4];
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!
 assign enbrd = bufrd & {REGCOUNT{rd_rr}};
 assign enbrp = bufrp & {REGPSIZE{wr_rr}};
-assign wr_rr = enbwr;
-assign rd_rr = enbrr;
-assign wr_fl = enbwr & i_alu; // only alu op writes to flag!
+assign wr_rr = enb_w;
+assign rd_rr = enb_r;
+assign wr_fl = enb_w & i_alu; // only alu op writes to flag!
 assign prdat[REGP_BC] = {qdata[0],qdata[1]};
 assign prdat[REGP_DE] = {qdata[2],qdata[3]};
 assign prdat[REGP_HL] = {qdata[4],qdata[5]};
@@ -260,7 +262,7 @@ register inst_reg (clk,1'b0,enb_c,bus_d,rinst);
 register temp_reg (clk,1'b0,enb_d,bus_d,rtemp);
 decoder wrdec (waddr,bufwr);
 decoder rddec (raddr,bufrd);
-decoder rpdec (rpadd,bufrp);
+decoder #(.SEL_SIZE(REGPBITS)) rpdec (rpadd,bufrp);
 register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,pcinc,pcout);
 incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg);
 
