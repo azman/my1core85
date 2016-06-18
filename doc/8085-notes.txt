@@ -62,3 +62,7 @@ cat doc/8085-inst.csv | grep "^.*;.*;.*;.*;S.*;.*$"
 cat doc/8085-inst.csv | grep "^.*;.*;.*;.*;.*B.*;.*$"
 
 - to count, simply append  " | wc -l"
+
+- looking for instruction using register pair
+
+cat doc/8085-inst.csv | grep "^.*;.*RP.*;.*;.*;.*;.*$"
