@@ -46,12 +46,13 @@ wire[INSTSIZE-1:0] chk_inst;
 wire i_txa, i_mov, i_alu, i_sic;
 wire i_hlt;
 wire tmp04, tmp05, tmp06;
-wire lo000, lo001, lo010, lo011, lo110, lo111;
+wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
-wire hi110, hi00x, hi01x, hi1x1;
+wire hi000, hi001, hi010, hi011, hi100, hi110;
+wire hi00x, hi01x, hi10x, hi11x, hi1x1;
 wire mem_d, mem_s;
 // machine cycles required by current inst? - need always block for this
-wire cyc_1,cyc_2,cycw2;
+wire cyc_1, cyc_2, cycw2, cyc_3, cycw3, cyc_4, cycw4, cyc_5, cycw5;
 reg[INFO_CYC-1:0] cycgo, cycrw;
 reg flags;
 
@@ -79,9 +80,16 @@ assign tmp04 = ~rinst[3] & rinst[2];
 assign tmp05 = rinst[3] & ~rinst[2];
 assign tmp06 = rinst[3] & rinst[2];
 // mid 3-bits
+assign hi000 = ~rinst[5] & ~rinst[4] & ~rinst[3];
+assign hi001 = ~rinst[5] & ~rinst[4] & rinst[3];
+assign hi010 = ~rinst[5] & rinst[4] & ~rinst[3];
+assign hi011 = ~rinst[5] & rinst[4] & rinst[3];
+assign hi100 = rinst[5] & ~rinst[4] & ~rinst[3];
 assign hi110 = rinst[5] & rinst[4] & ~rinst[3];
 assign hi00x = ~rinst[5] & ~rinst[4];
 assign hi01x = ~rinst[5] & rinst[4]; // 01x - io inst sig 2
+assign hi10x = rinst[5] & ~rinst[4];
+assign hi11x = rinst[5] & rinst[4];
 assign hi0x0 = ~rinst[5] & ~rinst[3];
 assign hi0x1 = ~rinst[5] & rinst[3];
 assign hi1x1 = rinst[5] & rinst[3];
@@ -90,6 +98,7 @@ assign lo000 = ~rinst[2] & ~rinst[1] & ~rinst[0];
 assign lo001 = ~rinst[2] & ~rinst[1] & rinst[0];
 assign lo010 = ~rinst[2] & rinst[1] & ~rinst[0];
 assign lo011 = ~rinst[2] & rinst[1] & rinst[0]; // 011 - io inst sig 1
+assign lo101 = rinst[2] & ~rinst[1] & rinst[0];
 assign lo110 = rinst[2] & rinst[1] & ~rinst[0];
 assign lo111 = rinst[2] & rinst[1] & rinst[0];
 assign lo10x = rinst[2] & ~rinst[1];
@@ -117,7 +126,7 @@ assign chk_inst[INST_GO6] =
 assign chk_inst[INST_RWH:INST_RWL] = cycrw;
 assign chk_inst[INST_CYH:INST_CYL] = cycgo;
 assign chk_inst[INST_CCC] = flags;
-// assign extra cycles if needed
+// assign extra cycles if needed - cyc_1 NOT needed?!
 assign cyc_1 = // 148 instructions (5 unused)
 	(i_txa & ~hi110 & lo10x) | // inc & dcr (14)
 	(i_txa & lo000) | // nop, unused{5}, sim, rim (8)
@@ -127,25 +136,73 @@ assign cyc_1 = // 148 instructions (5 unused)
 	(i_sic & lo011 & rinst[5] & (rinst[4]|rinst[3])) | // xchg,di,ei (3)
 	(i_mov & ~mem_d & ~mem_s) | // all mov with no m (49)
 	(i_alu & ~mem_s); // all alu with no m (56)
-assign cyc_2 = // 41 instructions
+assign cyc_2 = // 42 instructions
 	(i_txa & lo110 & ~hi110) | // mvi with no m (7)
-	(i_txa & lo010 & hi0x1) | // ldax (2)
+	(i_txa & lo010 & ~rinst[2]) | // ldax,stax (4)
 	(i_sic & lo110 ) | // alu immediate (8)
-	(i_mov & ~mem_d & mem_s) | // all mov with src=m &dst!=m (7)
+	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s) | // all alu with m (8)
-	cycw2 ; // (9)
-assign cycw2 = // sub:9-instructions
+	i_hlt ; // (1)
+assign cycw2 =
+	// cyc_3
+	(i_sic & lo111) | // rst (8)
+	(i_sic & lo101 & ~rinst[3]) | // push (4)
+	// cyc_2 - sub:9-instructions
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
+assign cyc_3 = // 47 instructions
+	// conditionals
+	(i_sic & lo000 ) | // rccc (8) - or one
+	(i_sic & lo010 ) | // jccc (8) - or two
+	// always
+	(i_sic & lo111) | // rst (8)
+	(i_sic & lo101 & ~rinst[3]) | // push (4)
+	(i_sic & lo001 & ~rinst[3]) | // pop (4)
+	(i_sic & lo011 & hi000 ) | // jmp (1)
+	(i_sic & lo001 & hi001 ) | // ret (1)
+	(i_txa & lo001) | // dad, lxi (8)
+	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])) | // inr,dcr,mvi m (3)
+	(i_sic & lo011 & hi01x); // i/o instruction (2)
+assign cycw3 = // sub:16-instructions
+	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])) | // inr,dcr,mvi m (3)
+	(i_sic & lo111) | // rst (8)
+	(i_sic & lo101 & ~rinst[3]) | // push (4)
+	(i_sic & lo011 & hi010); // out instruction (1)
+assign cyc_4 = // 2 instructions
+	(i_txa & lo010 & hi11x); // sta,lda (2)
+assign cycw4 =
+	// cyc_5
+	(i_sic & lo010) | // cccc (8)
+	(i_sic & lo011 & hi100) | // xthl (1)
+	(i_sic & lo101 & hi001) | // call (1)
+	(i_txa & lo010 & hi100) | // shld (1)
+	// cyc_4 - sub:1-instruction
+	(i_txa & lo010 & hi110); // sta (1)
+assign cyc_5 = // 12 instructions
+	// conditionals
+	(i_sic & lo010) | // cccc (8)
+	// always
+	(i_sic & lo011 & hi100) | // xthl (1)
+	(i_sic & lo101 & hi001) | // call (1)
+	(i_txa & lo010 & hi10x); // shld, lhld (2)
+assign cycw5 =
+	(i_sic & lo010) | // cccc (8)
+	(i_sic & lo011 & hi100) | // xthl (1)
+	(i_sic & lo101 & hi001) | // call (1)
+	(i_txa & lo010 & hi100); // shld (1)
 // combinational logic in always block
 always @(rinst) begin
-	cycgo = 4'b0000;
+	// mark extra machine cycles
+	if (cyc_2) cycgo = 4'b0001;
+	else if (cyc_3) cycgo = 4'b0011;
+	else if (cyc_4) cycgo = 4'b0111;
+	else if (cyc_5) cycgo = 4'b1111;
+	else cycgo = 4'b0000;
 	cycrw = 4'b0000;
-	if (cyc_2) begin
-		cycgo = 4'b0001;
-	end
 	if (cycw2) cycrw[0] = 1'b1; // write cycle
-	if (i_hlt) cycgo = 4'b0001;
+	if (cycw3) cycrw[1] = 1'b1; // write cycle
+	if (cycw4) cycrw[2] = 1'b1; // write cycle
+	if (cycw5) cycrw[3] = 1'b1; // write cycle
 	// status for conditional instruction
 	case (rinst[5:3])
 		3'b000: flags = ~qdata[REG_F][FLAGBITZ]; // NZ
