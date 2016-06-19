@@ -56,16 +56,17 @@ wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
 wire hi000, hi001, hi010, hi011, hi100, hi110;
 wire hi00x, hi01x, hi10x, hi11x, hi1x1;
-wire mem_d, mem_s;
+wire mem_d, mem_s, chk_p;
 // machine cycles required by current inst? - need always block for this
 wire cyc_1, cyc_2, cycw2, cyc_3, cycw3, cyc_4, cycw4, cyc_5, cycw5;
 reg[INFO_CYC-1:0] cycgo, cycrw;
 reg flags;
+// stuffs
 
 // reg block signals
 wire[DATASIZE-1:0] wdata, rdata, mdata;
 wire[REGSBITS-1:0] waddr, raddr;
-wire wr_rr, rd_rr, wr_fl;
+wire wr_rr, rd_rr, wr_fl, wr_rp, rd_rp;
 wire[REGPBITS-1:0] rpadd; // register pair address
 wire[ADDRSIZE-1:0] pcinc, pcout;
 wire[DATASIZE-1:0] pcflg;
@@ -73,7 +74,8 @@ wire[DATASIZE-1:0] pcflg;
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0],qdata[REGCOUNT-1:0];
 wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd;
 wire[REGPSIZE-1:0] enbrp, bufrp;
-wire[PAIRSIZE-1:0] prdat[REGPSIZE-1:0], pwdat[REGPSIZE-1:0];
+// write to reg always in bytes! not byte-pairs!
+wire[PAIRSIZE-1:0] prdat[REGPSIZE-1:0]; //, pwdat[REGPSIZE-1:0];
 wire[DATASIZE-1:0] rinst, rtemp;
 
 // alu block signals
@@ -120,17 +122,21 @@ assign mem_d = hi110; // 110 - mov dst = mem
 assign mem_s = lo110; // 110 - mov src = mem
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
+assign chk_p =
+	(i_txa & lo011) | // inx, dcx (8)
+	(i_txa & lo001) | // dad, lxi (8)
+	(i_txa & lo010 & hi10x); // shld, lhld (2)
 
 // assign output - decoded instruction info
 assign chk_i[INST_DAD] = i_txa & lo001 & rinst[3];
 assign chk_i[INST_HLT] = i_hlt;
 assign chk_i[INST_DIO] = i_sic & lo011 & hi01x;
 assign chk_i[INST_GO6] =
-	//(i_txa & ~rinst[2] & lox11) | // 00xxx011 - INX (4) @ DCX (4)
-	//(i_sic & rinst[2] & lox11) | // 11xxx111 - RST n (8)
-	//(i_sic & ~rinst[2] & lox00) | // 11xxx000 - Rccc (8)
-	//(i_sic & rinst[2] & lox00) | // 11xxx100 - Cccc (8)
-	((i_sic|i_txa) & lox11) | (i_sic & lox00) |
+	(i_txa & lo011) | // 00xxx011 - INX (4) @ DCX (4)
+	(i_sic & lo111) | // 11xxx111 - RST n (8)
+	//(i_sic & lo000) | // 11xxx000 - Rccc (8)
+	//(i_sic & lo100) | // 11xxx100 - Cccc (8)
+	(i_sic & lox00) |
 	(i_sic & tmp04 & lox01) | // 11xx0101 - push (4)
 	(i_sic & rinst[5] & tmp05 & lox01) | // 111x1001 - pchl, sphl (2)
 	(i_sic & hi00x & tmp06 & lox01); // 11001101 - call (1)
@@ -237,14 +243,16 @@ assign raddr = rinst[2:0];
 assign rpadd = rinst[5:4];
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!
 assign enbrd = bufrd & {REGCOUNT{rd_rr}};
-assign enbrp = bufrp & {REGPSIZE{wr_rr}};
-assign wr_rr = enb_w;
-assign rd_rr = enb_r;
-assign wr_fl = enb_w & i_alu; // only alu op writes to flag!
+assign enbrp = bufrp & {REGPSIZE{wr_rp}};
+assign wr_rr = enb_w & ~chk_p;
+assign rd_rr = enb_r & ~chk_p;
+assign wr_fl = enb_w & i_alu; // only alu op writes to flag! & pop psw?
+assign wr_rp = enb_w & chk_p;
+assign rd_rp = enb_r & chk_p;
 assign prdat[REGP_BC] = {qdata[0],qdata[1]};
 assign prdat[REGP_DE] = {qdata[2],qdata[3]};
 assign prdat[REGP_HL] = {qdata[4],qdata[5]};
-assign prdat[REGP_SP] = {qdata[6],qdata[7]};
+assign prdat[REGP_SP] = {qdata[6],qdata[7]}; // only for push psw???
 
 // reg block components
 genvar index;
@@ -267,6 +275,7 @@ decoder wrdec (waddr,bufwr);
 decoder rddec (raddr,bufrd);
 decoder #(.SEL_SIZE(REGPBITS)) rpdec (rpadd,bufrp);
 register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,pcinc,pcout);
+register #(.DATASIZE(PAIRSIZE)) r16sp (clk,1'b0,enbsp,spdwr,spdrd);
 incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg);
 
 // alu block connections
