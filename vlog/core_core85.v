@@ -26,10 +26,10 @@ wire enb_c,enb_d,enbpc,enbrr,enbwr;
 
 assign ADDR = oenb[ctrl.OENB_ADDH] ?
 	chk_a[ADDRSIZE-1:DATASIZE] : {DATASIZE{1'bz}};
-assign ADDRDATA = oenb[ctrl.OENB_ADDL] ?
+assign ADDRDATA = oenb[ctrl.OENB_ADDL] ? // replace bus_q signal for W!
 	chk_a[DATASIZE-1:0] : oenb[ctrl.OENB_DATA] ? bus_q : {DATASIZE{1'bz}};
 assign bus_d = (oenb[ctrl.OENB_ADDL]|oenb[ctrl.OENB_DATA]) ?
-	{DATASIZE{1'b0}} : ADDRDATA;
+	{DATASIZE{1'bz}} : ADDRDATA;
 // temporarily disabled?
 assign ipin[ctrl.IPIN_READY] = 1'b1; // always ready! READY;
 assign ipin[ctrl.IPIN_HOLD] = 1'b0; // no holding! HOLD;

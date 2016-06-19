@@ -100,11 +100,11 @@ assign do_devw = dowrite[0]&inst[INST_DIO];
 assign oenb[OENB_ADDL] = enb_adl;
 assign oenb[OENB_ADDH] = enb_adh;
 assign oenb[OENB_DATA] = enb_dat;
-assign oenb[OENB_REGR] = (cstate[2]|cstate[3]);
-assign oenb[OENB_REGW] = (cstate[3]&~isfirst);
+assign oenb[OENB_REGR] = (cstate[3]|cstate[4]);
+assign oenb[OENB_REGW] = (cstate[3]&~isfirst)|(cstate[4]&isfirst);
 assign oenb[OENB_C_WR] = (cstate[3]&isfirst);
 assign oenb[OENB_D_WR] = (cstate[3]&~isfirst);
-assign oenb[OENB_UPPC] = (cstate[3]&~do_bimc);
+assign oenb[OENB_UPPC] = (cstate[2]&~do_bimc); // increment pc in t2!
 // direct reg to pin
 assign opin[OPIN_S0] = pin_sta | stactl[STAT_S0];
 assign opin[OPIN_S1] = pin_sta | stactl[STAT_S1];
@@ -309,7 +309,6 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 	if(rst_ == 1) begin // actually active low
 		cstate <= STATE_TR;
 		// internal registers
-		isfirst <= 1'b1;
 		do_more <= {INFO_CYC{1'b0}};
 		dowrite <= {INFO_CYC{1'b0}};
 	end else begin
@@ -317,66 +316,47 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 		// entry action
 		case (nstate)
 			STATE_TR: begin
-				isfirst <= 1'b1;
 				do_more <= {INFO_CYC{1'b0}};
 				dowrite <= {INFO_CYC{1'b0}};
 			end
 			STATE_T1: begin
-				// update stactl on first state
-				// stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}
+				isfirst <= dofirst;
 				if (dofirst) begin
-					stactl <= CYCLE_OF; // first machine cycle opcode fetch
+					// update stactl on first state
+					// stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}
+					stactl <= CYCLE_OF;
+				end else if (inst[INST_DAD]) begin
+					stactl <= CYCLE_BID;
+				end else if (inst[INST_HLT]) begin
+					stactl <= CYCLE_BIH;
 				end else begin
 					case ({do_memr,do_memw,do_devr,do_devw})
 						4'b1000: stactl <= CYCLE_MR;
 						4'b0100: stactl <= CYCLE_MW;
 						4'b0010: stactl <= CYCLE_DR;
 						4'b0001: stactl <= CYCLE_DW;
-						default: begin
-							if (inst[INST_DAD]) begin
-								stactl <= CYCLE_BID;
-							end else if (inst[INST_HLT]) begin
-								stactl <= CYCLE_BIH;
-							end else begin
-								stactl <= CYCLE_ERR;
-							end
-						end
+						default: stactl <= CYCLE_ERR;
 					endcase
 				end
 			end
 			STATE_T3: begin
 				do_more <= do_more >> 1;
 				dowrite <= dowrite >> 1;
-				isfirst <= dofirst;
 			end
 			STATE_T4: begin
 				// assign next machine cycle here
 				if (~inst[INST_GO6]) begin
 					if (inst[INST_CYL]) begin
-						isfirst <= 1'b0;
 						do_more <= inst[INST_CYH:INST_CYL];
 						dowrite <= inst[INST_RWH:INST_RWL];
-					end else begin // no extended machine cycle - go op
-						stactl <= CYCLE_OF;
-						isfirst <= 1'b1;
-						// just in case, reset
-						//do_more <= {INFO_CYC{1'b0}};
-						//dowrite <= {INFO_CYC{1'b0}};
 					end
 				end
 			end
 			STATE_T6: begin
 				// assign next machine cycle here
 				if (inst[INST_CYL]) begin
-					isfirst <= 1'b0;
 					do_more <= inst[INST_CYH:INST_CYL];
 					dowrite <= inst[INST_RWH:INST_RWL];
-				end else begin // no extended machine cycle - go op
-					stactl <= CYCLE_OF;
-					isfirst <= 1'b1;
-					// just in case, reset
-					//do_more <= {INFO_CYC{1'b0}};
-					//dowrite <= {INFO_CYC{1'b0}};
 				end
 			end
 		endcase

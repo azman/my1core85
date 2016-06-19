@@ -230,7 +230,7 @@ assign chk_a = pcout; // program counter to drive address bus
 assign bus_q = rtemp;
 
 // reg block connections
-assign mdata = mem_s ? rtemp : rdata; // if mem src, get from temp reg!
+assign mdata = mem_s ? bus_d : rdata; // if mem src, get from temp reg!
 assign wdata = i_alu ? res_d : mdata; // if not alu op, must be mov?
 assign waddr = i_alu ? REG_A : rinst[5:3]; // always write to acc if alu op
 assign raddr = rinst[2:0];
@@ -254,7 +254,7 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 		assign enbwr[index] = wr_fl;
 		assign ddata[index] = wflag & FLAGMASK; // make sure unused is 0!
 	end else begin
-		assign enbwr[index] = (bufwr[index] & wr_rr)|enbrp[index];
+		assign enbwr[index] = bufwr[index] & wr_rr; // |enbrp[index]
 		assign ddata[index] = wdata;
 	end
 	register regs (clk,1'b0,enbwr[index],ddata[index],qdata[index]);

@@ -15,7 +15,20 @@ reg[DATASIZE-1:0] memory[(2**ADDRSIZE)-1:0];
 reg[ADDRSIZE-1:0] mem_addr;
 
 // memory read
-assign addrdata = (~rd_ & ~iom_) ? memory[mem_addr] : {DATASIZE{1'bz}};
+assign addrdata = (rd_===1'b0&&iom_===1'b0) ?
+	memory[mem_addr] : {DATASIZE{1'bz}};
+
+task reg_print;
+	begin
+		$write("[%04g] REGS: ", $time/CLKPTIME);
+		$write("[B:%h] [C:%h] ", dut.proc.qdata[0], dut.proc.qdata[1]);
+		$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
+		$write("[H:%h] [L:%h] ", dut.proc.qdata[4], dut.proc.qdata[5]);
+		$write("[F:%h] [A:%h] ", dut.proc.qdata[6], dut.proc.qdata[7]);
+		$write("[I:%h] [T:%h] ", dut.proc.rinst,dut.proc.rtemp);
+		$write("[PC:%h]\n", dut.proc.pcout);
+	end
+endtask
 
 // reset block
 initial begin
@@ -26,9 +39,8 @@ initial begin
 	//end
 	clk = 1'b0; rst = 1'b1; // power-on reset
 	#(CLKPTIME*3) rst = 1'b0; // 3-clock cycle reset
-	$monitor("[%04g] STATE: %b {%b,%b} [%h][%h][%h][%b][%b]",$time/CLKPTIME,
-		dut.ctrl.cstate,dut.oenb,dut.opin,dut.proc.pcout,
-		addr,addrdata,dut.proc.rinst,dut.proc.rtemp);
+	$monitor("[%04g] STATE: %b {%b,%b} [%h][%h]",$time/CLKPTIME,
+		dut.ctrl.cstate,dut.oenb,dut.opin,addr,addrdata);
 end
 
 // generate clock
@@ -41,6 +53,11 @@ always @(ale) begin
 	if (ale) begin
 		mem_addr =  { addr, addrdata };
 	end
+end
+
+// check on register value on every T1 state
+always @(dut.ctrl.cstate[1]) begin
+	if (dut.ctrl.cstate[1]) reg_print;
 end
 
 //generate stimuli
