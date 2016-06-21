@@ -1,21 +1,22 @@
 module core_control_tb();
 
 parameter CLKPTIME = 10;
-parameter IPIN_READY = 0;
-parameter IPIN_HOLD = 1;
+parameter INSTSIZE = dut.INSTSIZE;
+parameter IPIN_READY = dut.IPIN_READY;
+parameter IPIN_HOLD = dut.IPIN_HOLD;
 parameter IPIN_COUNT = dut.IPIN_COUNT;
 parameter OENB_COUNT = dut.OENB_COUNT;
 parameter OPIN_COUNT = dut.OPIN_COUNT;
 
 reg clk,rst;
-reg[dut.INSTSIZE-1:0] inst; // decoded instruction info
+reg[INSTSIZE-1:0] inst; // decoded instruction info
 reg[IPIN_COUNT-1:0] ipin;
 wire[OENB_COUNT-1:0] oenb;
 wire[OPIN_COUNT-1:0] opin;
 
 // reset block
 initial begin
-	clk = 1'b1; rst = 1'b0; inst = {dut.INSTSIZE{1'b0}};
+	clk = 1'b1; rst = 1'b0; inst = {INSTSIZE{1'b0}};
 	ipin = {IPIN_COUNT{1'b0}};
 	ipin[IPIN_READY] = 1'b1; // memory always ready!
 	$monitor("[%04g] STATE: %b {%b,%b}",$time/CLKPTIME,dut.cstate,oenb,opin);
@@ -36,18 +37,20 @@ end
 //parameter INST_CYH = 7;
 //parameter INST_RWL = 8;
 //parameter INST_RWH = 11;
-//parameter INST_CCC = 12; // condition flag
-//parameter INSTSIZE = 13;
+//parameter INST_CDL = 12;
+//parameter INST_CDH = 15;
+//parameter INST_CCC = 16;
+//parameter INSTSIZE = 17;
 
-parameter INST_FXXXX = 13'b0_0000_0000_0_0_0_0;
-parameter INST_SXXXX = 13'b0_0000_0000_0_0_0_1;
-parameter INST_FRXXX = 13'b0_0000_0001_0_0_0_0;
-parameter INST_FWXXX = 13'b0_0001_0001_0_0_0_0;
-parameter INST_FRRRX = 13'b0_0000_0111_0_0_0_0;
-parameter INST_FRRWX = 13'b0_0100_0111_0_0_0_0;
+parameter INST_FXXXX = 17'b0_0000_0000_0000_0_0_0_0;
+parameter INST_SXXXX = 17'b0_0000_0000_0000_0_0_0_1;
+parameter INST_FRXXX = 17'b0_0000_0000_0001_0_0_0_0;
+parameter INST_FWXXX = 17'b0_0000_0001_0001_0_0_0_0;
+parameter INST_FRRRX = 17'b0_0100_0000_0111_0_0_0_0;
+parameter INST_FRRWX = 17'b0_0100_0100_0111_0_0_0_0;
 
 task do_inst;
-	input[12:0] l_inst;
+	input[INSTSIZE-1:0] l_inst;
 	begin
 		// wait until state T2 to assign new inst
 		while (dut.cstate[2]!==1'b1) #1;
@@ -77,9 +80,9 @@ always begin
 	do_inst(INST_FRXXX); // assign 7-state FR instruction?
 	$display("[DEBUG] 2-cycle FW 7-state instruction!");
 	do_inst(INST_FWXXX); // assign 7-state FW instruction?
-	$display("[DEBUG] lda instruction!");
+	$display("[DEBUG] lda instruction! - 4th cycle is data!");
 	do_inst(INST_FRRRX); // assign lda instruction?
-	$display("[DEBUG] sta instruction!");
+	$display("[DEBUG] sta instruction! - 4th cycle is data!");
 	do_inst(INST_FRRWX); // assign sta instruction?
 	$finish;
 end

@@ -35,14 +35,15 @@ parameter INST_GO6 = 0;
 parameter INST_DAD = 1;
 parameter INST_HLT = 2;
 parameter INST_DIO = 3;
-parameter INFO_CYC = 4; // 4-bits cycle info
+parameter INFO_CYC = 4;
 parameter INST_CYL = 4;
 parameter INST_CYH = 7;
 parameter INST_RWL = 8;
 parameter INST_RWH = 11;
-// 8-bit machine cycle info (4-11)
-parameter INST_CCC = 12; // condition flag
-parameter INSTSIZE = 13;
+parameter INST_CDL = 12;
+parameter INST_CDH = 15;
+parameter INST_CCC = 16;
+parameter INSTSIZE = 17;
 // input pins
 parameter IPIN_READY = 0;
 parameter IPIN_HOLD = 1;
@@ -56,7 +57,8 @@ parameter OENB_REGW = 4;
 parameter OENB_C_WR = 5;
 parameter OENB_D_WR = 6;
 parameter OENB_UPPC = 7;
-parameter OENB_COUNT = 8;
+parameter OENB_PDAT = 8; // use data address for RD/WR cycle
+parameter OENB_COUNT = 9;
 // direct ouput pins
 parameter OPIN_S0 = 0;
 parameter OPIN_S1 = 1;
@@ -73,6 +75,7 @@ input[INSTSIZE-1:0] inst;
 input[IPIN_COUNT-1:0] ipin;
 output[OENB_COUNT-1:0] oenb;
 output[OPIN_COUNT-1:0] opin;
+// out port types
 wire[OENB_COUNT-1:0] oenb;
 wire[OPIN_COUNT-1:0] opin;
 
@@ -80,7 +83,7 @@ wire[OPIN_COUNT-1:0] opin;
 reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
 reg[STACTLSZ-1:0] stactl;
 reg isfirst;
-reg[INFO_CYC-1:0] do_more, dowrite;
+reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 // output logic - used in always block
 reg pin_ale, pin_ia_, pin_wr_, pin_rd_, pin_im_, pin_sta;
 reg enb_adh, enb_adl, enb_dat, enb_ctl;
@@ -102,9 +105,10 @@ assign oenb[OENB_ADDH] = enb_adh;
 assign oenb[OENB_DATA] = enb_dat;
 assign oenb[OENB_REGR] = (cstate[3]|cstate[4]);
 assign oenb[OENB_REGW] = (cstate[3]&~isfirst)|(cstate[4]&isfirst);
-assign oenb[OENB_C_WR] = (cstate[3]&isfirst);
-assign oenb[OENB_D_WR] = (cstate[3]&~isfirst);
-assign oenb[OENB_UPPC] = (cstate[2]&~do_bimc); // increment pc in t2!
+assign oenb[OENB_C_WR] = (cstate[3]&isfirst); // fetch cycle write to i-reg
+assign oenb[OENB_D_WR] = (cstate[3]&~isfirst); // others write to temp reg
+assign oenb[OENB_UPPC] = (cstate[2]&(isfirst|(~do_bimc&~do_data[0])));
+assign oenb[OENB_PDAT] = do_data[0];
 // direct reg to pin
 assign opin[OPIN_S0] = pin_sta | stactl[STAT_S0];
 assign opin[OPIN_S1] = pin_sta | stactl[STAT_S1];
@@ -311,6 +315,7 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 		// internal registers
 		do_more <= {INFO_CYC{1'b0}};
 		dowrite <= {INFO_CYC{1'b0}};
+		do_data <= {INFO_CYC{1'b0}};
 	end else begin
 		cstate <= nstate;
 		// entry action
@@ -318,6 +323,7 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 			STATE_TR: begin
 				do_more <= {INFO_CYC{1'b0}};
 				dowrite <= {INFO_CYC{1'b0}};
+				do_data <= {INFO_CYC{1'b0}};
 			end
 			STATE_T1: begin
 				isfirst <= dofirst;
@@ -342,6 +348,7 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 			STATE_T3: begin
 				do_more <= do_more >> 1;
 				dowrite <= dowrite >> 1;
+				do_data <= do_data >> 1;
 			end
 			STATE_T4: begin
 				// assign next machine cycle here
@@ -349,6 +356,7 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 					if (inst[INST_CYL]) begin
 						do_more <= inst[INST_CYH:INST_CYL];
 						dowrite <= inst[INST_RWH:INST_RWL];
+						do_data <= inst[INST_CDH:INST_CDL];
 					end
 				end
 			end
@@ -357,6 +365,7 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 				if (inst[INST_CYL]) begin
 					do_more <= inst[INST_CYH:INST_CYL];
 					dowrite <= inst[INST_RWH:INST_RWL];
+					do_data <= inst[INST_CDH:INST_CDL];
 				end
 			end
 		endcase
