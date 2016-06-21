@@ -1,5 +1,4 @@
-module alureg (clk, rst_, enb_c, enb_d, enbpc, enb_r, enb_w,
-	bus_d, bus_q, chk_i, chk_a);
+module alureg (clk, rst_, ienb, bus_d, bus_q, chk_i, chk_a);
 
 parameter DATASIZE = 8;
 parameter PAIRSIZE = DATASIZE*2;
@@ -26,20 +25,33 @@ parameter FLAGBITZ = 6;
 parameter FLAGBITA = 4;
 parameter FLAGBITP = 2;
 parameter FLAGBITC = 0;
+// enb signals from control unit?
+parameter IENB_OFF = 3; // bus enable signals
+parameter IENB_RRD = 0;
+parameter IENB_RWR = 1;
+parameter IENB_COD = 2;
+parameter IENB_DAT = 3;
+parameter IENB_PC_ = 4;
+parameter IENB_PD_ = 5; // data rw cycle - do not use pc!
+parameter IENBSIZE = 6;
+// instruction flags
 parameter INST_GO6 = 0;
 parameter INST_DAD = 1;
 parameter INST_HLT = 2;
 parameter INST_DIO = 3;
-parameter INFO_CYC = 4; // 4-bits cycle info
+parameter INFO_CYC = 4; // 4-bits machine cycle info (post fetch)
 parameter INST_CYL = 4;
 parameter INST_CYH = 7;
 parameter INST_RWL = 8;
 parameter INST_RWH = 11;
-// 8-bit machine cycle info (4-11)
-parameter INST_CCC = 12; // condition flag
-parameter INSTSIZE = 13;
+parameter INST_CDL = 12; // code/data select
+parameter INST_CDH = 15;
+// 12-bit machine cycle info (4-15)
+parameter INST_CCC = 16; // condition flag
+parameter INSTSIZE = 17;
 
-input clk, rst_, enb_c, enb_d, enbpc, enb_r, enb_w;
+input clk, rst_;
+input[IENBSIZE-1:0] ienb;
 input[DATASIZE-1:0] bus_d;
 output[DATASIZE-1:0] bus_q;
 output[INSTSIZE-1:0] chk_i;
@@ -48,6 +60,8 @@ wire[DATASIZE-1:0] bus_q;
 wire[INSTSIZE-1:0] chk_i;
 wire[ADDRSIZE-1:0] chk_a;
 
+// internal wiring
+wire enb_r, enb_w, enb_c, enb_d, enbpc, use_d;
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic;
 wire i_hlt, i_aid;
@@ -58,17 +72,18 @@ wire hi000, hi001, hi010, hi011, hi100, hi110;
 wire hi00x, hi01x, hi10x, hi11x, hi1x1;
 wire mem_d, mem_s, chk_p;
 // machine cycles required by current inst? - need always block for this
-wire cyc_1, cyc_2, cycw2, cyc_3, cycw3, cyc_4, cycw4, cyc_5, cycw5;
-reg[INFO_CYC-1:0] cycgo, cycrw;
+wire cyc_1, cyc_2, cyc_3, cyc_4, cyc_5;
+wire cycw2, cycw3, cycw4, cycw5;
+wire cycd2, cycd3, cycd4, cycd5;
+reg[INFO_CYC-1:0] cycgo, cycrw, cyccd;
 reg flags;
-// stuffs
 
 // reg block signals
 wire[DATASIZE-1:0] wdata, rdata, mdata;
 wire[REGSBITS-1:0] waddr, raddr;
 wire wr_rr, rd_rr, wr_fl, wr_rp, rd_rp;
 wire[REGPBITS-1:0] rpadd; // register pair address
-wire[ADDRSIZE-1:0] pcinc, pcout;
+wire[ADDRSIZE-1:0] pcinc, pcout , pdout;
 wire[DATASIZE-1:0] pcflg;
 // 'internals'
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0],qdata[REGCOUNT-1:0];
@@ -81,6 +96,14 @@ wire[DATASIZE-1:0] rinst, rtemp;
 // alu block signals
 wire[DATASIZE-1:0] op1_d, op2_d, res_d, rflag, wflag;
 wire[REGSBITS-1:0] selop;
+
+// assign internal signals - avoid having to replace previous code!
+assign enb_r = ienb[IENB_RRD];
+assign enb_w = ienb[IENB_RWR];
+assign enb_c = ienb[IENB_COD];
+assign enb_d = ienb[IENB_DAT];
+assign enbpc = ienb[IENB_PC_];
+assign use_d = ienb[IENB_PD_];
 
 // top 2-bits instruction decoding
 assign i_txa = ~rinst[7] & ~rinst[6]; // 00 - transfer + arithmetic
@@ -142,6 +165,7 @@ assign chk_i[INST_GO6] =
 	(i_sic & hi00x & tmp06 & lox01); // 11001101 - call (1)
 assign chk_i[INST_RWH:INST_RWL] = cycrw;
 assign chk_i[INST_CYH:INST_CYL] = cycgo;
+assign chk_i[INST_CDH:INST_CDL] = cyccd;
 assign chk_i[INST_CCC] = flags;
 // assign extra cycles if needed - cyc_1 NOT needed?!
 assign cyc_1 = // 148 instructions (5 unused)
@@ -167,6 +191,9 @@ assign cycw2 =
 	// cyc_2 - sub:9-instructions
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
+assign cycd2 =
+	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
+	(i_alu & mem_s); // all alu with m (8)
 assign cyc_3 = // 47 instructions
 	// conditionals
 	(i_sic & lo000 ) | // rccc (8) - or one
@@ -185,6 +212,7 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo111) | // rst (8)
 	(i_sic & lo101 & ~rinst[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
+assign cycd3 = 1'b0;
 assign cyc_4 = // 2 instructions
 	(i_txa & lo010 & hi11x); // sta,lda (2)
 assign cycw4 =
@@ -195,6 +223,7 @@ assign cycw4 =
 	(i_txa & lo010 & hi100) | // shld (1)
 	// cyc_4 - sub:1-instruction
 	(i_txa & lo010 & hi110); // sta (1)
+assign cycd4 = 1'b0;
 assign cyc_5 = // 12 instructions
 	// conditionals
 	(i_sic & lo010) | // cccc (8)
@@ -207,6 +236,7 @@ assign cycw5 =
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi100); // shld (1)
+assign cycd5 = 1'b0;
 // combinational logic in always block
 always @(rinst) begin
 	// mark extra machine cycles
@@ -220,6 +250,11 @@ always @(rinst) begin
 	if (cycw3) cycrw[1] = 1'b1; // write cycle
 	if (cycw4) cycrw[2] = 1'b1; // write cycle
 	if (cycw5) cycrw[3] = 1'b1; // write cycle
+	cyccd = 4'b0000;
+	if (cycd2) cyccd[0] = 1'b1; // use data memory pointer
+	if (cycd3) cyccd[1] = 1'b1;
+	if (cycd4) cyccd[2] = 1'b1;
+	if (cycd5) cyccd[3] = 1'b1;
 	// status for conditional instruction
 	case (rinst[5:3])
 		3'b000: flags = ~qdata[REG_F][FLAGBITZ]; // NZ
@@ -232,8 +267,9 @@ always @(rinst) begin
 		3'b111: flags = qdata[REG_F][FLAGBITS]; // M
 	endcase
 end
-assign chk_a = pcout; // program counter to drive address bus
+assign chk_a =  use_d ? pdout : pcout; // drive address bus
 assign bus_q = rtemp;
+assign pdout = prdat[REGP_HL];
 
 // reg block connections
 assign mdata = mem_s ? bus_d : rdata; // if mem src, get from temp reg!
