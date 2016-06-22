@@ -64,7 +64,7 @@ wire[ADDRSIZE-1:0] chk_a;
 wire enb_r, enb_w, enb_c, enb_d, enbpc, use_d;
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic;
-wire i_hlt, i_aid;
+wire i_hlt, i_aid, i_ali;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -145,6 +145,7 @@ assign mem_d = hi110; // 110 - mov dst = mem
 assign mem_s = lo110; // 110 - mov src = mem
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
+assign i_ali = i_sic & mem_s; // alu immediate
 assign chk_p =
 	(i_txa & lo011) | // inx, dcx (8)
 	(i_txa & lo001) | // dad, lxi (8)
@@ -212,7 +213,8 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo111) | // rst (8)
 	(i_sic & lo101 & ~rinst[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
-assign cycd3 = 1'b0;
+assign cycd3 =
+	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])); // inr,dcr,mvi m (3)
 assign cyc_4 = // 2 instructions
 	(i_txa & lo010 & hi11x); // sta,lda (2)
 assign cycw4 =
@@ -268,13 +270,13 @@ always @(rinst) begin
 	endcase
 end
 assign chk_a = use_d ? pdout : pcout; // drive address bus
-assign bus_q = rdata; // rtemp;
+assign bus_q = mem_s ? rtemp : rdata; // get from temp instead of flag?
 assign pdout = prdat[REGP_HL];
 
 // reg block connections
-assign mdata = mem_s ? bus_d : rdata; // if mem src, get from temp reg!
-assign wdata = i_alu ? res_d : mdata; // if not alu op, must be mov?
-assign waddr = i_alu ? REG_A : rinst[5:3]; // always write to acc if alu op
+assign mdata = mem_s ? bus_d : rdata; // if mem src, get from bus
+assign wdata = i_alu|i_ali ? res_d : mdata; // if not alu op, must be mov?
+assign waddr = i_alu|i_ali ? REG_A : rinst[5:3]; // alu op writes to acc
 assign raddr = rinst[2:0];
 assign rpadd = rinst[5:4];
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!

@@ -104,9 +104,10 @@ assign oenb[OENB_ADDL] = enb_adl;
 assign oenb[OENB_ADDH] = enb_adh;
 assign oenb[OENB_DATA] = enb_dat;
 assign oenb[OENB_REGR] = (cstate[2]|cstate[3]|cstate[4]);
-assign oenb[OENB_REGW] = (cstate[3]&~isfirst)|(cstate[4]&isfirst&~do_more[0]);
-assign oenb[OENB_C_WR] = (cstate[3]&isfirst); // fetch cycle write to i-reg
-assign oenb[OENB_D_WR] = (cstate[3]&~isfirst); // others write to temp reg
+assign oenb[OENB_REGW] = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
+	(cstate[4]&isfirst&~do_more[0]);
+assign oenb[OENB_C_WR] = (cstate[3]&isfirst);
+assign oenb[OENB_D_WR] = (cstate[3]&~isfirst&stactl[CTRL_WR_]);
 assign oenb[OENB_UPPC] = (cstate[2]&(isfirst|(~do_bimc&~do_data[0])));
 assign oenb[OENB_PDAT] = do_data[0];
 // direct reg to pin
