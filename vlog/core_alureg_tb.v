@@ -87,7 +87,7 @@ task code_mvi;
 	input[DATASIZE-1:0] data;
 	reg[DATASIZE-1:0] code;
 	begin
-		code = { 2'b01,reg_,3'b110 };
+		code = { 2'b00,reg_,3'b110 };
 		reg_data(DO_CODE,code);
 		reg_data(DO_DATA,data);
 		#(1*CLKPTIME); enbrr = 1'b1;

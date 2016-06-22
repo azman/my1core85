@@ -11,8 +11,8 @@ wire clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_, ale, hlda, sod;
 
 // system memory
 reg[DATASIZE-1:0] memory[(2**ADDRSIZE)-1:0];
-//integer loop;
 reg[ADDRSIZE-1:0] mem_addr;
+//integer loop;
 
 // memory read
 assign addrdata = (rd_===1'b0&&iom_===1'b0) ?
@@ -27,6 +27,13 @@ task reg_print;
 		$write("[F:%h] [A:%h] ", dut.proc.qdata[6], dut.proc.qdata[7]);
 		$write("[I:%h] [T:%h] ", dut.proc.rinst,dut.proc.rtemp);
 		$write("[PC:%h]\n", dut.proc.pcout);
+	end
+endtask
+
+task mem_print;
+	input[ADDRSIZE-1:0] addr;
+	begin
+		$write("[%04g] MEM@%h: %h\n", $time/CLKPTIME,addr,memory[addr]);
 	end
 endtask
 
@@ -55,14 +62,26 @@ always @(ale) begin
 	end
 end
 
+// memory writes
+always @(wr_) begin
+	if (wr_===1'b0&&iom_===1'b0) begin
+		memory[mem_addr] = addrdata;
+	end
+end
+
 // check on register value on every T1 state
 always @(dut.ctrl.cstate[1]) begin
-	if (dut.ctrl.cstate[1]) reg_print;
+	if (dut.ctrl.cstate[1]) begin
+		reg_print;
+		mem_print(16'h2000);
+	end
 end
 
 //generate stimuli
 always begin
-	#(CLKPTIME*50); $finish;
+	while (dut.proc.rinst!==8'h76) #1; // wait for halt instruction
+	while (dut.ctrl.cstate[9]!==1'b1) #1; // wait for halt state
+	$finish;
 end
 
 core85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,

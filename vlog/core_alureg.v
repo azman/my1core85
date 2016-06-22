@@ -267,8 +267,8 @@ always @(rinst) begin
 		3'b111: flags = qdata[REG_F][FLAGBITS]; // M
 	endcase
 end
-assign chk_a =  use_d ? pdout : pcout; // drive address bus
-assign bus_q = rtemp;
+assign chk_a = use_d ? pdout : pcout; // drive address bus
+assign bus_q = rdata; // rtemp;
 assign pdout = prdat[REGP_HL];
 
 // reg block connections

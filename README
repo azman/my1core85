@@ -1,0 +1,14 @@
+---------
+my1core85
+---------
+
+An implementation of an 8-bit 8085-binary-compatible microprocesor.
+
+
+Completion Progress:
+- General functionality complete
+  = alu, register, control sequence
+- Instructions (01xxxxxx) are complete
+  = {{mov reg,reg},{mov m,reg},{mov reg,m},{hlt}}
+- Instructions (10xxxxxx) are complete
+  = {<alu> reg} <alu>={add,adc,sub,sbb,and,xor,or,cmp}, {<alu> m}
