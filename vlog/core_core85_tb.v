@@ -25,15 +25,96 @@ task reg_print;
 		$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
 		$write("[H:%h] [L:%h] ", dut.proc.qdata[4], dut.proc.qdata[5]);
 		$write("[F:%h] [A:%h] ", dut.proc.qdata[6], dut.proc.qdata[7]);
-		$write("[I:%h] [T:%h] ", dut.proc.rinst,dut.proc.rtemp);
+		$write("[I:%h] [T:%h] ", dut.proc.rinst, dut.proc.rtemp);
 		$write("[PC:%h]\n", dut.proc.pcout);
+	end
+endtask
+
+function[7:0] decode_reg;
+	input[2:0] radd;
+	reg[7:0] text;
+	begin
+		case(radd)
+			3'b000: text = "b";
+			3'b001: text = "c";
+			3'b010: text = "d";
+			3'b011: text = "e";
+			3'b100: text = "h";
+			3'b101: text = "l";
+			3'b110: text = "m";
+			3'b111: text = "a";
+		endcase
+		decode_reg = text;
+	end
+endfunction
+
+task deassemble;
+	input[7:0] inst;
+	reg[8-1:0] text;
+	begin
+		$write("[%04g] ==> INSTRUCTION: ", $time/CLKPTIME);
+		case(inst[7:6])
+			2'b00: begin
+				if (inst[2:0]===3'b110) begin
+					$write("mvi %s,data8\n",decode_reg(inst[5:3]));
+				end else if (inst[2:0]===3'b100) begin
+					$write("inr %s\n",decode_reg(inst[5:3]));
+				end else if (inst[2:0]===3'b101) begin
+					$write("dcr %s\n",decode_reg(inst[5:3]));
+				end else begin
+					$write("UNKNOWN! %b\n",inst);
+				end
+			end
+			2'b01: begin
+				// mov instructions... plus hlt
+				if (inst[5:3]===3'b110&&inst[2:0]===3'b110) begin
+					$write("hlt\n");
+				end else begin
+					$write("mov %s, %s\n",decode_reg(inst[5:3]),
+						decode_reg(inst[2:0]));
+				end
+			end
+			2'b10: begin
+				// alu instructions
+				case(inst[5:3])
+					3'b000: $write("add ");
+					3'b001: $write("adc ");
+					3'b010: $write("sub ");
+					3'b011: $write("sbb ");
+					3'b100: $write("ana ");
+					3'b101: $write("xra ");
+					3'b110: $write("ora ");
+					3'b111: $write("cmp ");
+				endcase
+				$write("%s\n",decode_reg(inst[2:0]));
+			end
+			2'b11: begin
+				if (inst[2:0]===3'b110) begin
+					case(inst[5:3])
+						3'b000: $write("adi ");
+						3'b001: $write("aci ");
+						3'b010: $write("sui ");
+						3'b011: $write("sbi ");
+						3'b100: $write("ani ");
+						3'b101: $write("xri ");
+						3'b110: $write("ori ");
+						3'b111: $write("cpi ");
+					endcase
+					$write("data8\n");
+				end else begin
+					$write("UNKNOWN! %b\n",inst);
+				end
+			end
+		endcase
 	end
 endtask
 
 task mem_print;
 	input[ADDRSIZE-1:0] addr;
 	begin
-		$write("[%04g] MEM@%h: %h\n", $time/CLKPTIME,addr,memory[addr]);
+		$write("[%04g] MEM@%h: %h %h %h %h\n", $time/CLKPTIME,
+			addr, memory[addr], memory[addr+1],
+			memory[addr+2], memory[addr+3]);
 	end
 endtask
 
@@ -77,7 +158,14 @@ always @(dut.ctrl.cstate[1]) begin
 	end
 end
 
-//generate stimuli
+// detect instruction on every T4 state
+always @(dut.ctrl.cstate[4]) begin
+	if (dut.ctrl.cstate[4]) begin
+		deassemble(dut.proc.rinst);
+	end
+end
+
+// detect stop condition
 always begin
 	while (dut.proc.rinst!==8'h76) #1; // wait for halt instruction
 	while (dut.ctrl.cstate[9]!==1'b1) #1; // wait for halt state

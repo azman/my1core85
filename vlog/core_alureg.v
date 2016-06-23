@@ -79,29 +79,30 @@ reg[INFO_CYC-1:0] cycgo, cycrw, cyccd;
 reg flags;
 
 // reg block signals
-wire[DATASIZE-1:0] wdata, rdata, mdata;
-wire[REGSBITS-1:0] waddr, raddr;
+wire[DATASIZE-1:0] wdata, rdata, wrreg, rdreg, mdata;
+wire[REGSBITS-1:0] waddr, raddr, iaddr;
 wire wr_rr, rd_rr, wr_fl, wr_rp, rd_rp;
 wire[REGPBITS-1:0] rpadd; // register pair address
 wire[ADDRSIZE-1:0] pcinc, pcout , pdout;
 wire[DATASIZE-1:0] pcflg;
 // 'internals'
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0],qdata[REGCOUNT-1:0];
-wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd;
+wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd, bufid;
 wire[REGPSIZE-1:0] enbrp, bufrp;
 // write to reg always in bytes! not byte-pairs!
 wire[PAIRSIZE-1:0] prdat[REGPSIZE-1:0]; //, pwdat[REGPSIZE-1:0];
-wire[DATASIZE-1:0] rinst, rtemp;
+wire[DATASIZE-1:0] rinst, rtemp, dtemp;
 
 // alu block signals
 wire[DATASIZE-1:0] op1_d, op2_d, res_d, rflag, wflag;
+wire[DATASIZE-1:0] aid_d, aid_q, aid_f;
 wire[REGSBITS-1:0] selop;
 
 // assign internal signals - avoid having to replace previous code!
 assign enb_r = ienb[IENB_RRD];
 assign enb_w = ienb[IENB_RWR];
 assign enb_c = ienb[IENB_COD];
-assign enb_d = ienb[IENB_DAT];
+assign enb_d = i_aid ? enb_w : ienb[IENB_DAT];
 assign enbpc = ienb[IENB_PC_];
 assign use_d = ienb[IENB_PD_];
 
@@ -193,6 +194,7 @@ assign cycw2 =
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
+	(i_txa & hi110 & lo10x) | // inr,dcr m (2)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s); // all alu with m (8)
 assign cyc_3 = // 47 instructions
@@ -270,13 +272,16 @@ always @(rinst) begin
 	endcase
 end
 assign chk_a = use_d ? pdout : pcout; // drive address bus
-assign bus_q = mem_s ? rtemp : rdata; // get from temp instead of flag?
+assign bus_q = mem_s | i_aid ? rtemp : rdata; // get from temp instead of flag?
 assign pdout = prdat[REGP_HL];
+assign dtemp = i_aid ? aid_q : bus_d;
 
 // reg block connections
+assign wrreg = aid_q;
 assign mdata = mem_s ? bus_d : rdata; // if mem src, get from bus
 assign wdata = i_alu|i_ali ? res_d : mdata; // if not alu op, must be mov?
 assign waddr = i_alu|i_ali ? REG_A : rinst[5:3]; // alu op writes to acc
+assign iaddr = rinst[5:3];
 assign raddr = rinst[2:0];
 assign rpadd = rinst[5:4];
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!
@@ -284,7 +289,7 @@ assign enbrd = bufrd & {REGCOUNT{rd_rr}};
 assign enbrp = bufrp & {REGPSIZE{wr_rp}};
 assign wr_rr = enb_w & ~chk_p;
 assign rd_rr = enb_r & ~chk_p;
-assign wr_fl = enb_w & i_alu; // only alu op writes to flag! & pop psw?
+assign wr_fl = enb_w & ~chk_p & (i_alu|i_ali|i_aid); // on alu op & pop psw?
 assign wr_rp = enb_w & chk_p;
 assign rd_rp = enb_r & chk_p;
 assign prdat[REGP_BC] = {qdata[0],qdata[1]};
@@ -298,31 +303,36 @@ generate
 for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 	if (index==REG_F) begin
 		assign enbwr[index] = wr_fl;
-		assign ddata[index] = wflag & FLAGMASK; // make sure unused is 0!
+		assign ddata[index] = i_aid ? aid_f&FLAGMASK : wflag&FLAGMASK;
 	end else begin
-		assign enbwr[index] = bufwr[index] & wr_rr; // |enbrp[index]
-		assign ddata[index] = wdata;
+		assign enbwr[index] = i_aid ? bufid[index] & wr_rr :
+			bufwr[index] & wr_rr;
+		assign ddata[index] = i_aid ? wrreg : wdata;
 	end
 	register regs (clk,1'b0,enbwr[index],ddata[index],qdata[index]);
 	zbuffer buff (enbrd[index],qdata[index],rdata);
+	zbuffer bufz (bufid[index],qdata[index],rdreg);
 end
 endgenerate
 register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
-register temp_reg (clk,1'b0,enb_d,bus_d,rtemp);
+register temp_reg (clk,1'b0,enb_d,dtemp,rtemp);
 decoder wrdec (waddr,bufwr);
 decoder rddec (raddr,bufrd);
+decoder iddec (iaddr,bufid);
 decoder #(.SEL_SIZE(REGPBITS)) rpdec (rpadd,bufrp);
 register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,pcinc,pcout);
 register #(.DATASIZE(PAIRSIZE)) r16sp (clk,1'b0,enbsp,spdwr,spdrd);
-incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg);
+incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg); // pcflg dummy
 
 // alu block connections
 assign op1_d = qdata[REG_A];
 assign op2_d = mdata;
 assign selop = rinst[5:3];
 assign rflag = qdata[REG_F];
+assign aid_d = mem_d ? bus_d : rdreg;
 
 // alu block components
 alu alu_block (selop,op1_d,op2_d,rflag,res_d,wflag);
+incdec aid_block (rinst[0],aid_d,aid_q,aid_f);
 
 endmodule
