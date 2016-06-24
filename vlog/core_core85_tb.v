@@ -24,9 +24,15 @@ task reg_print;
 		$write("[B:%h] [C:%h] ", dut.proc.qdata[0], dut.proc.qdata[1]);
 		$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
 		$write("[H:%h] [L:%h] ", dut.proc.qdata[4], dut.proc.qdata[5]);
-		$write("[F:%h] [A:%h] ", dut.proc.qdata[6], dut.proc.qdata[7]);
+		$write("[F:%h] [A:%h]\n", dut.proc.qdata[6], dut.proc.qdata[7]);
+		$write("[%04g] REGS: ", $time/CLKPTIME);
 		$write("[I:%h] [T:%h] ", dut.proc.rinst, dut.proc.rtemp);
-		$write("[PC:%h]\n", dut.proc.pcout);
+		$write("[PC:%h] [SP:%h]\n", dut.proc.pcout, dut.proc.spout);
+		//$write("[%04g] REGS: ", $time/CLKPTIME);
+		//$write("[{ENBWR:%b}{BUFWR:%b}<WDATA:%h>] ",
+		//	dut.proc.enbwr, dut.proc.bufwr, dut.proc.wdata);
+		//$write("[(CHK_P:%b,PADDR:%b,WADDR:%b)]\n",
+		//	dut.proc.chk_p, dut.proc.paddr, dut.proc.waddr);
 	end
 endtask
 
@@ -48,6 +54,20 @@ function[7:0] decode_reg;
 	end
 endfunction
 
+function[2*8-1:0] decode_rpr;
+	input[1:0] radd;
+	reg[2*8-1:0] text;
+	begin
+		case(radd)
+			2'b00: text = "b";
+			2'b01: text = "d";
+			2'b10: text = "h";
+			2'b11: text = "sp";
+		endcase
+		decode_rpr = text;
+	end
+endfunction
+
 task deassemble;
 	input[7:0] inst;
 	reg[8-1:0] text;
@@ -61,6 +81,10 @@ task deassemble;
 					$write("inr %s\n",decode_reg(inst[5:3]));
 				end else if (inst[2:0]===3'b101) begin
 					$write("dcr %s\n",decode_reg(inst[5:3]));
+				end else if (inst[3:0]===3'b0001) begin
+					$write("lxi %s,dat16\n",decode_rpr(inst[5:4]));
+				end else if (inst[3:0]===3'b1001) begin
+					$write("dad %s\n",decode_rpr(inst[5:4]));
 				end else begin
 					$write("UNKNOWN! %b\n",inst);
 				end
@@ -144,7 +168,7 @@ always @(ale) begin
 end
 
 // memory writes
-always @(wr_) begin
+always @(posedge clk) begin
 	if (wr_===1'b0&&iom_===1'b0) begin
 		memory[mem_addr] = addrdata;
 	end

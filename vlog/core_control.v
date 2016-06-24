@@ -58,7 +58,8 @@ parameter OENB_C_WR = 5;
 parameter OENB_D_WR = 6;
 parameter OENB_UPPC = 7;
 parameter OENB_PDAT = 8; // use data address for RD/WR cycle
-parameter OENB_COUNT = 9;
+parameter OENB_NEXT = 9; // provide next cycle info
+parameter OENB_COUNT = 10;
 // direct ouput pins
 parameter OPIN_S0 = 0;
 parameter OPIN_S1 = 1;
@@ -82,7 +83,7 @@ wire[OPIN_COUNT-1:0] opin;
 // internal registers
 reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
 reg[STACTLSZ-1:0] stactl;
-reg isfirst;
+reg isfirst, is_next;
 reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 // output logic - used in always block
 reg pin_ale, pin_ia_, pin_wr_, pin_rd_, pin_im_, pin_sta;
@@ -110,6 +111,7 @@ assign oenb[OENB_C_WR] = (cstate[3]&isfirst);
 assign oenb[OENB_D_WR] = (cstate[3]&~isfirst&stactl[CTRL_WR_]);
 assign oenb[OENB_UPPC] = (cstate[2]&(isfirst|(~do_bimc&~do_data[0])));
 assign oenb[OENB_PDAT] = do_data[0];
+assign oenb[OENB_NEXT] = is_next;
 // direct reg to pin
 assign opin[OPIN_S0] = pin_sta | stactl[STAT_S0];
 assign opin[OPIN_S1] = pin_sta | stactl[STAT_S1];
@@ -328,6 +330,7 @@ always @(posedge clk_ or posedge rst_) begin // asynchronous reset, active low
 			end
 			STATE_T1: begin
 				isfirst <= dofirst;
+				is_next <= do_more[1];
 				if (dofirst) begin
 					// update stactl on first state
 					// stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}

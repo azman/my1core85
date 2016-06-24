@@ -33,7 +33,8 @@ parameter IENB_COD = 2;
 parameter IENB_DAT = 3;
 parameter IENB_PC_ = 4;
 parameter IENB_PD_ = 5; // data rw cycle - do not use pc!
-parameter IENBSIZE = 6;
+parameter IENB_NXT = 6; // provide next cycle info
+parameter IENBSIZE = 7;
 // instruction flags
 parameter INST_GO6 = 0;
 parameter INST_DAD = 1;
@@ -61,10 +62,11 @@ wire[INSTSIZE-1:0] chk_i;
 wire[ADDRSIZE-1:0] chk_a;
 
 // internal wiring
-wire enb_r, enb_w, enb_c, enb_d, enbpc, use_d;
+wire enb_r, enb_w, enb_c, enb_d, enbpc, ensph, enspl, use_d;
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic;
-wire i_hlt, i_aid, i_ali;
+wire i_hlt, i_aid, i_ali, i_lxi;
+wire i_tmp;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -79,18 +81,16 @@ reg[INFO_CYC-1:0] cycgo, cycrw, cyccd;
 reg flags;
 
 // reg block signals
-wire[DATASIZE-1:0] wdata, rdata, wrreg, rdreg, mdata;
-wire[REGSBITS-1:0] waddr, raddr, iaddr;
-wire wr_rr, rd_rr, wr_fl, wr_rp, rd_rp;
-wire[REGPBITS-1:0] rpadd; // register pair address
-wire[ADDRSIZE-1:0] pcinc, pcout , pdout;
-wire[DATASIZE-1:0] pcflg;
+wire[DATASIZE-1:0] wdata, rdata, rdreg, mdata;
+wire[REGSBITS-1:0] waddr, raddr, paddr;
+wire wr_rr, rd_rr, wr_fl;
+wire[ADDRSIZE-1:0] pcinc, pcout, pdout, spout;
+wire[DATASIZE-1:0] pcflg, sph_d, spl_d, sph_q, spl_q;
 // 'internals'
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0],qdata[REGCOUNT-1:0];
-wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd, bufid;
-wire[REGPSIZE-1:0] enbrp, bufrp;
-// write to reg always in bytes! not byte-pairs!
-wire[PAIRSIZE-1:0] prdat[REGPSIZE-1:0]; //, pwdat[REGPSIZE-1:0];
+wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd;
+// write to reg-pair always byte-by-byte! not in byte-pairs!
+wire[PAIRSIZE-1:0] prdat[REGPSIZE-1:0];
 wire[DATASIZE-1:0] rinst, rtemp, dtemp;
 
 // alu block signals
@@ -100,10 +100,12 @@ wire[REGSBITS-1:0] selop;
 
 // assign internal signals - avoid having to replace previous code!
 assign enb_r = ienb[IENB_RRD];
-assign enb_w = ienb[IENB_RWR];
+assign enb_w = ienb[IENB_RWR] & ~i_tmp;
 assign enb_c = ienb[IENB_COD];
-assign enb_d = i_aid ? enb_w : ienb[IENB_DAT];
+assign enb_d = ienb[IENB_RWR] & i_tmp; //i_aid ? enb_w : ienb[IENB_DAT];
 assign enbpc = ienb[IENB_PC_];
+assign ensph = bufwr[REG_F] & wr_rr & i_lxi;
+assign enspl = bufwr[REG_A] & wr_rr & i_lxi;
 assign use_d = ienb[IENB_PD_];
 
 // top 2-bits instruction decoding
@@ -147,10 +149,13 @@ assign mem_s = lo110; // 110 - mov src = mem
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & mem_s; // alu immediate
-assign chk_p =
-	(i_txa & lo011) | // inx, dcx (8)
-	(i_txa & lo001) | // dad, lxi (8)
-	(i_txa & lo010 & hi10x); // shld, lhld (2)
+assign chk_p = i_lxi;
+//	(i_txa & lo011) | // inx, dcx (8)
+//	(i_txa & lo001) | // dad, lxi (8)
+//	(i_txa & lo010 & hi10x); // shld, lhld (2)
+assign i_lxi = (i_txa & lo001); // dad, lxi (8)
+assign i_tmp = //(i_aid & mem_d);
+	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])); // inr,dcr,mvi m (3)
 
 // assign output - decoded instruction info
 assign chk_i[INST_DAD] = i_txa & lo001 & rinst[3];
@@ -272,26 +277,24 @@ always @(rinst) begin
 	endcase
 end
 assign chk_a = use_d ? pdout : pcout; // drive address bus
-assign bus_q = mem_s | i_aid ? rtemp : rdata; // get from temp instead of flag?
+assign bus_q = mem_s | i_aid ? rtemp : rdata;
 assign pdout = prdat[REGP_HL];
 assign dtemp = i_aid ? aid_q : bus_d;
+assign spout = { sph_q, spl_q };
+assign sph_d = wdata;
+assign spl_d = wdata;
 
 // reg block connections
-assign wrreg = aid_q;
-assign mdata = mem_s ? bus_d : rdata; // if mem src, get from bus
+assign mdata = mem_s|i_lxi ? bus_d : rdata; // if mem src, get from bus
 assign wdata = i_alu|i_ali ? res_d : mdata; // if not alu op, must be mov?
 assign waddr = i_alu|i_ali ? REG_A : rinst[5:3]; // alu op writes to acc
-assign iaddr = rinst[5:3];
 assign raddr = rinst[2:0];
-assign rpadd = rinst[5:4];
+assign paddr = {rinst[5:4],ienb[IENB_NXT]};
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!
 assign enbrd = bufrd & {REGCOUNT{rd_rr}};
-assign enbrp = bufrp & {REGPSIZE{wr_rp}};
-assign wr_rr = enb_w & ~chk_p;
-assign rd_rr = enb_r & ~chk_p;
-assign wr_fl = enb_w & ~chk_p & (i_alu|i_ali|i_aid); // on alu op & pop psw?
-assign wr_rp = enb_w & chk_p;
-assign rd_rp = enb_r & chk_p;
+assign wr_rr = enb_w;
+assign rd_rr = enb_r;
+assign wr_fl = enb_w & (i_alu|i_ali|i_aid); // on alu op & pop psw?
 assign prdat[REGP_BC] = {qdata[0],qdata[1]};
 assign prdat[REGP_DE] = {qdata[2],qdata[3]};
 assign prdat[REGP_HL] = {qdata[4],qdata[5]};
@@ -304,24 +307,25 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 	if (index==REG_F) begin
 		assign enbwr[index] = wr_fl;
 		assign ddata[index] = i_aid ? aid_f&FLAGMASK : wflag&FLAGMASK;
+	end else if (index==REG_A) begin
+		assign enbwr[index] = bufwr[index] & wr_rr & ~chk_p;
+		assign ddata[index] = i_aid ? aid_q : wdata;
 	end else begin
-		assign enbwr[index] = i_aid ? bufid[index] & wr_rr :
-			bufwr[index] & wr_rr;
-		assign ddata[index] = i_aid ? wrreg : wdata;
+		assign enbwr[index] = bufwr[index] & wr_rr;
+		assign ddata[index] = i_aid ? aid_q : wdata;
 	end
 	register regs (clk,1'b0,enbwr[index],ddata[index],qdata[index]);
 	zbuffer buff (enbrd[index],qdata[index],rdata);
-	zbuffer bufz (bufid[index],qdata[index],rdreg);
+	zbuffer bufz (bufwr[index],qdata[index],rdreg);
 end
 endgenerate
 register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
 register temp_reg (clk,1'b0,enb_d,dtemp,rtemp);
-decoder wrdec (waddr,bufwr);
+decoder wrdec (chk_p?paddr:waddr,bufwr);
 decoder rddec (raddr,bufrd);
-decoder iddec (iaddr,bufid);
-decoder #(.SEL_SIZE(REGPBITS)) rpdec (rpadd,bufrp);
 register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,pcinc,pcout);
-register #(.DATASIZE(PAIRSIZE)) r16sp (clk,1'b0,enbsp,spdwr,spdrd);
+register r8sph (clk,1'b0,ensph,sph_d,sph_q);
+register r8spl (clk,1'b0,enspl,spl_d,spl_q);
 incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg); // pcflg dummy
 
 // alu block connections
