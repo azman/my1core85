@@ -52,7 +52,6 @@ assign ipin[ctrl.IPIN_HOLD] = 1'b0; // no holding! HOLD;
 
 assign ienb = oenb[proc.IENB_OFF+proc.IENBSIZE-1:proc.IENB_OFF];
 
-
 control ctrl (~CLK, ~RST_, chk_i, ipin, oenb, opin);
 alureg proc (CLK, ~RST_, ienb, bus_d, bus_q, chk_i, chk_a);
 

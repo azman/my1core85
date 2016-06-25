@@ -42,8 +42,10 @@ parameter INST_RWL = 8;
 parameter INST_RWH = 11;
 parameter INST_CDL = 12;
 parameter INST_CDH = 15;
-parameter INST_CCC = 16;
-parameter INSTSIZE = 17;
+parameter INST_ALE = 16;
+parameter INST_3RD = 17;
+parameter INST_CCC = 18;
+parameter INSTSIZE = 19;
 // input pins
 parameter IPIN_READY = 0;
 parameter IPIN_HOLD = 1;
@@ -59,7 +61,9 @@ parameter OENB_MORE = 6; // extended cycle period
 parameter OENB_UPPC = 7;
 parameter OENB_PDAT = 8; // use data address for RD/WR cycle
 parameter OENB_NEXT = 9; // provide next cycle info
-parameter OENB_COUNT = 10;
+parameter OENB_ALE_ = 10; // first state - ale
+parameter OENB_3RD_ = 11; // third state - control rd/wr/inta
+parameter OENB_COUNT = 12;
 // direct ouput pins
 parameter OPIN_S0 = 0;
 parameter OPIN_S1 = 1;
@@ -90,6 +94,7 @@ reg pin_ale, pin_ia_, pin_wr_, pin_rd_, pin_im_, pin_sta;
 reg enb_adh, enb_adl, enb_dat, enb_ctl;
 // internal wiring (combinational logic)
 wire do_bimc, do_last, dofirst, do_memr, do_memw, do_devr, do_devw;
+wire chk_rd_, chk_wr_, chk_ia_;
 
 // control logic
 assign do_bimc = (inst[INST_DAD]|inst[INST_HLT])&~dofirst;
@@ -112,14 +117,19 @@ assign oenb[OENB_MORE] = (cstate[5]|cstate[6]);
 assign oenb[OENB_UPPC] = (cstate[2]&(isfirst|(~do_bimc&~do_data[0])));
 assign oenb[OENB_PDAT] = do_data[0];
 assign oenb[OENB_NEXT] = is_next;
+assign oenb[OENB_ALE_] = pin_ale;
+assign oenb[OENB_3RD_] = cstate[3];
 // direct reg to pin
 assign opin[OPIN_S0] = pin_sta | stactl[STAT_S0];
 assign opin[OPIN_S1] = pin_sta | stactl[STAT_S1];
 assign opin[OPIN_IOM_] = enb_ctl ? pin_im_ & stactl[STAT_IOM_] : 1'bz;
-assign opin[OPIN_RD_] = enb_ctl ? pin_rd_ | stactl[CTRL_RD_] : 1'bz;
-assign opin[OPIN_WR_] = enb_ctl ? pin_wr_ | stactl[CTRL_WR_] : 1'bz;
-assign opin[OPIN_INTA_] = pin_ia_ | stactl[CTRL_INTA_];
-assign opin[OPIN_ALE] = pin_ale;
+assign opin[OPIN_RD_] = enb_ctl ? pin_rd_ | chk_rd_ : 1'bz;
+assign opin[OPIN_WR_] = enb_ctl ? pin_wr_ | chk_wr_ : 1'bz;
+assign opin[OPIN_INTA_] = pin_ia_ | chk_ia_;
+assign opin[OPIN_ALE] = pin_ale & inst[INST_ALE];
+assign chk_rd_ = stactl[CTRL_RD_] | inst[INST_3RD];
+assign chk_wr_ = stactl[CTRL_WR_] | inst[INST_3RD];
+assign chk_ia_ = stactl[CTRL_INTA_] | inst[INST_3RD];
 
 // output logic - depends on state only
 always @(cstate) begin

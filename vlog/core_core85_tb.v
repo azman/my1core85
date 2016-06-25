@@ -59,9 +59,9 @@ function[2*8-1:0] decode_rpr;
 	reg[2*8-1:0] text;
 	begin
 		case(radd)
-			2'b00: text = "b";
-			2'b01: text = "d";
-			2'b10: text = "h";
+			2'b00: text = "b ";
+			2'b01: text = "d ";
+			2'b10: text = "h ";
 			2'b11: text = "sp";
 		endcase
 		decode_rpr = text;
@@ -72,7 +72,7 @@ task deassemble;
 	input[7:0] inst;
 	reg[8-1:0] text;
 	begin
-		$write("[%04g] ==> INSTRUCTION: ", $time/CLKPTIME);
+		$write("[%04g] ==> INST {%b}: ", $time/CLKPTIME,inst);
 		case(inst[7:6])
 			2'b00: begin
 				if (inst[2:0]===3'b110) begin
@@ -89,6 +89,16 @@ task deassemble;
 					$write("inx %s\n",decode_rpr(inst[5:4]));
 				end else if (inst[3:0]===4'b1011) begin
 					$write("dcx %s\n",decode_rpr(inst[5:4]));
+				end else if (inst[3:0]===4'b0010) begin
+					if (inst[5]===1'b0)
+						$write("stax %s\n",decode_rpr(inst[5:4]));
+					else
+						$write("UNKNOWN! %b\n",inst);
+				end else if (inst[3:0]===4'b1010) begin
+					if (inst[5]===1'b0)
+						$write("ldax %s\n",decode_rpr(inst[5:4]));
+					else
+						$write("UNKNOWN! %b\n",inst);
 				end else if (inst[5:0]===6'b000000) begin
 					$write("nop\n");
 				end else begin
@@ -172,17 +182,25 @@ always @(ale) begin
 end
 
 // memory writes
-always @(posedge clk) begin
-	if (wr_===1'b0&&iom_===1'b0) begin
-		$write("[%04g] MEM@%h: %h => ", $time/CLKPTIME,
+always @(posedge wr_) begin
+	if (iom_===1'b0) begin
+		$write("[%04g] WR MEM@%h: %h => ", $time/CLKPTIME,
 			mem_addr, memory[mem_addr]);
 		memory[mem_addr] = addrdata;
 		$write("%h\n", memory[mem_addr]);
 	end
 end
 
+// memory writes
+always @(posedge rd_) begin
+	if (iom_===1'b0) begin // &&s0===1'b0
+		$write("[%04g] RD MEM@%h: %h\n", $time/CLKPTIME,
+			mem_addr, memory[mem_addr]);
+	end
+end
+
 // detect register change
-always @(dut.proc.qdata or dut.proc.spout) begin
+always @(dut.proc.qdata or dut.proc.spout) begin // or dut.proc.pcout
 	$write("[%04g] REGS: ", $time/CLKPTIME);
 	$write("[B:%h] [C:%h] ", dut.proc.qdata[0], dut.proc.qdata[1]);
 	$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
@@ -195,6 +213,7 @@ always @(dut.proc.qdata or dut.proc.spout) begin
 	//$write("[F:%h] [A:%h]\n", dut.proc.ddata[6], dut.proc.ddata[7]);
 	$write("[%04g] REGS: ", $time/CLKPTIME);
 	$write("[I:%h] [T:%h] ", dut.proc.rinst, dut.proc.rtemp);
+	$write("[PD:%h] ", dut.proc.pdout);
 	$write("[PC:%h] [SP:%h]\n", dut.proc.pcout, dut.proc.spout);
 end
 
@@ -216,6 +235,11 @@ always begin
 	while (dut.proc.rinst!==8'h76) #1; // wait for halt instruction
 	while (dut.ctrl.cstate[9]!==1'b1) #1; // wait for halt state
 	$finish;
+end
+
+// fail-safe stop condition
+always begin
+	#2000 $finish;
 end
 
 core85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,

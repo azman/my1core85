@@ -35,7 +35,9 @@ parameter IENB_EXT = 3; // extended cycle period
 parameter IENB_PC_ = 4;
 parameter IENB_PD_ = 5; // data rw cycle - do not use pc!
 parameter IENB_NXT = 6; // select bit for reg pair
-parameter IENBSIZE = 7;
+parameter IENB_ALE = 7;
+parameter IENB_3RD = 8;
+parameter IENBSIZE = 9;
 // instruction flags
 parameter INST_GO6 = 0;
 parameter INST_DAD = 1;
@@ -49,8 +51,10 @@ parameter INST_RWH = 11;
 parameter INST_CDL = 12; // code/data select
 parameter INST_CDH = 15;
 // 12-bit machine cycle info (4-15)
-parameter INST_CCC = 16; // condition flag
-parameter INSTSIZE = 17;
+parameter INST_ALE = 16; // ale limiter
+parameter INST_CTL = 17; // ctrl limiter
+parameter INST_CCC = 18; // condition flag
+parameter INSTSIZE = 19;
 
 input clk, rst_;
 input[IENBSIZE-1:0] ienb;
@@ -66,9 +70,8 @@ wire[ADDRSIZE-1:0] chk_a;
 wire enb_r, enb_w, enb_c, enb_d, sel_p;
 wire enbpc, ensph, enspl, use_d, ixsel;
 // for instruction decoding
-wire i_txa, i_mov, i_alu, i_sic;
-wire i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad, i_xid, i_nop;
+wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
+wire i_tmp, i_dad, i_xid, i_nop, i_mmx, i_acc;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -80,13 +83,13 @@ wire cyc_1, cyc_2, cyc_3, cyc_4, cyc_5;
 wire cycw2, cycw3, cycw4, cycw5;
 wire cycd2, cycd3, cycd4, cycd5;
 reg[INFO_CYC-1:0] cycgo, cycrw, cyccd;
-reg flags;
+reg flags, q_ale, q_rwi;
 
 // reg block signals
 wire[DATASIZE-1:0] wdata, rdata, rdreg, mdata;
 wire[REGSBITS-1:0] waddr, paddr, xaddr, addwr, addrd, addr2;
 wire wr_rr, rd_rr, wr_rp, wr_fl;
-wire[PAIRSIZE-1:0] pcout, pdout, spout;
+wire[PAIRSIZE-1:0] pcout, pdout, spout, mxout;
 wire[PAIRSIZE-1:0] rpout, ixout, ixdat;
 wire[REGPBITS-1:0] rpadd;
 wire[DATASIZE-1:0] sph_d, spl_d, sph_q, spl_q, dflag;
@@ -103,6 +106,18 @@ wire[DATASIZE-1:0] rinst, rtemp, dtemp;
 wire[DATASIZE-1:0] op1_d, op2_d, res_d, rflag, xflag, wflag;
 wire[DATASIZE-1:0] aid_d, aid_q, aid_f;
 wire[REGSBITS-1:0] selop;
+
+// create half cycles
+always @(posedge clk or posedge rst_)
+begin
+	if (rst_=== 1'b1) begin
+		q_ale <= 1'b1;
+		q_rwi <= 1'b0;
+	end else begin
+		q_ale <= ~ienb[IENB_ALE];
+		q_rwi <= ienb[IENB_3RD];
+	end
+end
 
 // assign internal signals - avoid having to replace previous code!
 assign enb_r = ienb[IENB_RRD];
@@ -165,8 +180,9 @@ assign i_tmp = //(i_aid & mem_d);
 	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])); // inr,dcr,mvi m (3)
 assign i_dad = i_txa & lo001 & rinst[3];
 assign i_xid = i_txa & lo011; // increment/decrement pair
-assign i_nop = i_xid |
-	(i_txa & hi000 & lo000); // nop
+assign i_nop = i_xid | (i_txa & hi000 & lo000); // nop
+assign i_mmx = (i_txa & lo010 & ~rinst[2]); // ldax,stax (4)
+assign i_acc = i_mmx;
 
 // assign output - decoded instruction info
 assign chk_i[INST_DAD] = i_dad;
@@ -184,6 +200,8 @@ assign chk_i[INST_GO6] =
 assign chk_i[INST_RWH:INST_RWL] = cycrw;
 assign chk_i[INST_CYH:INST_CYL] = cycgo;
 assign chk_i[INST_CDH:INST_CDL] = cyccd;
+assign chk_i[INST_ALE] = q_ale;
+assign chk_i[INST_CTL] = q_rwi;
 assign chk_i[INST_CCC] = flags;
 // assign extra cycles if needed - cyc_1 NOT needed?!
 assign cyc_1 = // 148 instructions (5 unused)
@@ -210,6 +228,7 @@ assign cycw2 =
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
+	(i_txa & lo010 & ~rinst[2]) | // ldax,stax (4)
 	(i_txa & hi110 & lo10x) | // inr,dcr m (2)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s); // all alu with m (8)
@@ -288,19 +307,20 @@ always @(rinst) begin
 	endcase
 end
 assign chk_a = use_d ? pdout : pcout; // drive address bus
-assign bus_q = mem_s | i_aid ? rtemp : rdata;
-assign pdout = rpdat[REGP_HL];
+assign bus_q = i_acc ? qdata[REG_A] : (mem_s | i_aid ? rtemp : rdata);
+assign pdout = i_mmx ? mxout : rpdat[REGP_HL];
+assign mxout = rinst[4] ? rpdat[REGP_DE] : rpdat[REGP_BC];
 assign dtemp = i_aid ? aid_q : bus_d;
 assign spout = { sph_q, spl_q };
 assign sph_d = i_xid ? ixout[PAIRSIZE-1:DATASIZE] : wdata;
 assign spl_d = i_xid ? ixout[DATASIZE-1:0] : wdata;
 
 // reg block connections
-assign mdata = mem_s|i_lxi ? bus_d : rdata; // if mem src, get from bus
+assign mdata = mem_s|i_lxi|i_acc ? bus_d : rdata; // if mem src, get from bus
 assign wdata = i_alu|i_ali|i_dad ? res_d : mdata;
 assign waddr = i_alu|i_ali|i_dad ? xaddr : rinst[5:3];
 assign xaddr = i_dad ? (sel_p?REG_L:REG_H) : REG_A;
-assign addwr = chk_p ? (i_dad?xaddr:paddr) : waddr;
+assign addwr = i_acc ? REG_A : (chk_p ? (i_dad?xaddr:paddr) : waddr);
 assign addrd = rinst[2:0];
 assign addr2 = chk_p ? paddr : waddr;
 assign rpadd = rinst[5:4];
