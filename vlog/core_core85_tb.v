@@ -68,6 +68,38 @@ function[2*8-1:0] decode_rpr;
 	end
 endfunction
 
+function[3*8-1:0] decode_rpx;
+	input[1:0] radd;
+	reg[3*8-1:0] text;
+	begin
+		case(radd)
+			2'b00: text = "b  ";
+			2'b01: text = "d  ";
+			2'b10: text = "h  ";
+			2'b11: text = "psw";
+		endcase
+		decode_rpx = text;
+	end
+endfunction
+
+function[2*8-1:0] decode_ccc;
+	input[2:0] cond;
+	reg[2*8-1:0] text;
+	begin
+		case(cond)
+			3'b000: text = "nz";
+			3'b001: text = "z ";
+			3'b010: text = "nc";
+			3'b011: text = "c ";
+			3'b100: text = "po";
+			3'b101: text = "pe";
+			3'b110: text = "p ";
+			3'b111: text = "m ";
+		endcase
+		decode_ccc = text;
+	end
+endfunction
+
 task deassemble;
 	input[7:0] inst;
 	reg[8-1:0] text;
@@ -75,34 +107,53 @@ task deassemble;
 		$write("[%04g] ==> INST {%b}: ", $time/CLKPTIME,inst);
 		case(inst[7:6])
 			2'b00: begin
-				if (inst[2:0]===3'b110) begin
-					$write("mvi %s,data8\n",decode_reg(inst[5:3]));
+				if (inst[2:0]===3'b000) begin
+					case(inst[5:3])
+						3'b000: $write("nop\n");
+						3'b100: $write("rim\n");
+						3'b110: $write("sim\n");
+						default: begin
+							$write("NOT USED!\n");
+							$finish;
+						end
+					endcase
+				end else if (inst[2:0]===3'b001) begin
+					if (rinst[3]) $write("dad %s\n",decode_rpr(inst[5:4]));
+					else $write("lxi %s,dat16\n",decode_rpr(inst[5:4]));
+				end else if (inst[2:0]===3'b010) begin
+					case(inst[5:3])
+						3'b000: $write("stax %s\n",decode_rpr(inst[5:4]));
+						3'b001: $write("ldax %s\n",decode_rpr(inst[5:4]));
+						3'b010: $write("stax %s\n",decode_rpr(inst[5:4]));
+						3'b011: $write("ldax %s\n",decode_rpr(inst[5:4]));
+						3'b100: $write("shld\n");
+						3'b101: $write("lhld\n");
+						3'b110: $write("sta add16\n");
+						3'b111: $write("lda add16\n");
+					endcase
+				end else if (inst[2:0]===3'b011) begin
+					if (rinst[3]) $write("dcx %s\n",decode_rpr(inst[5:4]));
+					else $write("inx %s\n",decode_rpr(inst[5:4]));
 				end else if (inst[2:0]===3'b100) begin
 					$write("inr %s\n",decode_reg(inst[5:3]));
 				end else if (inst[2:0]===3'b101) begin
 					$write("dcr %s\n",decode_reg(inst[5:3]));
-				end else if (inst[3:0]===4'b0001) begin
-					$write("lxi %s,dat16\n",decode_rpr(inst[5:4]));
-				end else if (inst[3:0]===4'b1001) begin
-					$write("dad %s\n",decode_rpr(inst[5:4]));
-				end else if (inst[3:0]===4'b0011) begin
-					$write("inx %s\n",decode_rpr(inst[5:4]));
-				end else if (inst[3:0]===4'b1011) begin
-					$write("dcx %s\n",decode_rpr(inst[5:4]));
-				end else if (inst[3:0]===4'b0010) begin
-					if (inst[5]===1'b0)
-						$write("stax %s\n",decode_rpr(inst[5:4]));
-					else
-						$write("UNKNOWN! %b\n",inst);
-				end else if (inst[3:0]===4'b1010) begin
-					if (inst[5]===1'b0)
-						$write("ldax %s\n",decode_rpr(inst[5:4]));
-					else
-						$write("UNKNOWN! %b\n",inst);
-				end else if (inst[5:0]===6'b000000) begin
-					$write("nop\n");
+				end else if (inst[2:0]===3'b110) begin
+					$write("mvi %s,data8\n",decode_reg(inst[5:3]));
+				end else if (inst[2:0]===3'b111) begin
+					case(inst[5:3])
+						3'b000: $write("rlc\n");
+						3'b001: $write("rrc\n");
+						3'b010: $write("ral\n");
+						3'b011: $write("rar\n");
+						3'b100: $write("daa\n");
+						3'b101: $write("cma\n");
+						3'b110: $write("stc\n");
+						3'b111: $write("cmc\n");
+					endcase
 				end else begin
-					$write("UNKNOWN! %b\n",inst);
+					$write("INVALID!\n");
+					$finish;
 				end
 			end
 			2'b01: begin
@@ -129,7 +180,13 @@ task deassemble;
 				$write("%s\n",decode_reg(inst[2:0]));
 			end
 			2'b11: begin
-				if (inst[2:0]===3'b110) begin
+				if (inst[2:0]===3'b000) begin
+					$write("r%s\n",decode_ccc(inst[5:3]));
+				end else if (inst[2:0]===3'b010) begin
+					$write("j%s add16\n",decode_ccc(inst[5:3]));
+				end else if (inst[2:0]===3'b100) begin
+					$write("c%s add16\n",decode_ccc(inst[5:3]));
+				end else if (inst[2:0]===3'b110) begin
 					case(inst[5:3])
 						3'b000: $write("adi ");
 						3'b001: $write("aci ");
@@ -141,8 +198,44 @@ task deassemble;
 						3'b111: $write("cpi ");
 					endcase
 					$write("data8\n");
+				end else if (inst[2:0]===3'b001) begin
+					case(inst[5:3])
+						3'b000: $write("pop %s\n",decode_rpx(inst[5:4]));
+						3'b001: $write("ret\n");
+						3'b010: $write("pop %s\n",decode_rpx(inst[5:4]));
+						3'b011: $write("NOT USED!\n"); $finish;
+						3'b100: $write("pop %s\n",decode_rpx(inst[5:4]));
+						3'b101: $write("pchl\n");
+						3'b110: $write("pop %s\n",decode_rpx(inst[5:4]));
+						3'b111: $write("sphl\n");
+					endcase
+				end else if (inst[2:0]===3'b011) begin
+					case(inst[5:3])
+						3'b000: $write("jmp add16\n");
+						3'b001: $write("NOT USED!\n"); $finish;
+						3'b010: $write("out port8\n");
+						3'b011: $write("in port8\n");
+						3'b100: $write("xthl\n");
+						3'b101: $write("xchg\n");
+						3'b110: $write("di\n");
+						3'b111: $write("ei\n");
+					endcase
+				end else if (inst[2:0]===3'b101) begin
+					case(inst[5:3])
+						3'b000: $write("push %s\n",decode_rpx(inst[5:4]));
+						3'b001: $write("call add16\n");
+						3'b010: $write("push %s\n",decode_rpx(inst[5:4]));
+						3'b011: $write("NOT USED!\n"); $finish;
+						3'b100: $write("push %s\n",decode_rpx(inst[5:4]));
+						3'b101: $write("NOT USED!\n"); $finish;
+						3'b110: $write("push %s\n",decode_rpx(inst[5:4]));
+						3'b111: $write("NOT USED!\n"); $finish;
+					endcase
+				end else if (inst[2:0]===3'b111) begin
+					$write("rst %g\n",inst[5:3]);
 				end else begin
-					$write("UNKNOWN! %b\n",inst);
+					$write("INVALID!\n");
+					$finish;
 				end
 			end
 		endcase
