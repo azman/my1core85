@@ -71,12 +71,14 @@ wire enb_r, enb_w, enb_c, enb_d, sel_p;
 wire enbpc, ensph, enspl, use_d, ixsel;
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad, i_xid, i_nop, i_mmx, i_acc;
+wire i_tmp, i_dad, i_xid, i_nop, i_mmx, i_acc, i_imk;
+wire i_rim, i_sim;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
 wire hi000, hi001, hi010, hi011, hi100, hi110;
-wire hi00x, hi01x, hi10x, hi11x, hi1x1;
+wire hi00x, hi01x, hi10x, hi11x;
+wire hi0x0, hi0x1, hi1x0, hi1x1;
 wire mem_d, mem_s, chk_p;
 // machine cycles required by current inst? - need always block for this
 wire cyc_1, cyc_2, cyc_3, cyc_4, cyc_5;
@@ -102,6 +104,9 @@ wire[REGPSIZE-1:0] buf2x;
 wire[PAIRSIZE-1:0] rpdat[REGPSIZE-1:0];
 wire[DATASIZE-1:0] rinst, rtemp, dtemp;
 
+wire enb_i;
+wire[DATASIZE-1:0] int_d, int_q;
+
 // alu block signals
 wire[DATASIZE-1:0] op1_d, op2_d, res_d, rflag, xflag, wflag;
 wire[DATASIZE-1:0] aid_d, aid_q, aid_f;
@@ -121,9 +126,10 @@ end
 
 // assign internal signals - avoid having to replace previous code!
 assign enb_r = ienb[IENB_RRD];
-assign enb_w = ienb[IENB_RWR] & ~i_tmp;
+assign enb_w = ienb[IENB_RWR] & ~i_tmp; // write to main reg-block
+assign enb_i = ienb[IENB_RWR] & i_sim;
 assign enb_c = ienb[IENB_COD];
-assign enb_d = ienb[IENB_RWR] & i_tmp;
+assign enb_d = ienb[IENB_RWR] & i_tmp; // write to temp register
 assign sel_p = ienb[IENB_NXT];
 assign enbpc = ienb[IENB_PC_];
 assign ensph = (bufwr[REG_F] & wr_rr & i_lxi)|(bufix[REG_F] & wr_rp);
@@ -152,6 +158,7 @@ assign hi10x = rinst[5] & ~rinst[4];
 assign hi11x = rinst[5] & rinst[4];
 assign hi0x0 = ~rinst[5] & ~rinst[3];
 assign hi0x1 = ~rinst[5] & rinst[3];
+assign hi1x0 = rinst[5] & ~rinst[3];
 assign hi1x1 = rinst[5] & rinst[3];
 // low 3-bits
 assign lo000 = ~rinst[2] & ~rinst[1] & ~rinst[0];
@@ -183,6 +190,9 @@ assign i_xid = i_txa & lo011; // increment/decrement pair
 assign i_nop = i_xid | (i_txa & hi000 & lo000); // nop
 assign i_mmx = (i_txa & lo010 & ~rinst[2]); // ldax,stax (4)
 assign i_acc = i_mmx;
+assign i_imk = i_rim | i_sim;
+assign i_rim = (i_txa & hi100 & lo000);
+assign i_sim = (i_txa & hi110 & lo000);
 
 // assign output - decoded instruction info
 assign chk_i[INST_DAD] = i_dad;
@@ -345,8 +355,9 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 		assign ddata[index] = i_aid ? aid_f&FLAGMASK : xflag&FLAGMASK;
 		zbuffer bufz (bufr2[index],sph_q,rdreg);
 	end else if (index==REG_A) begin
-		assign enbwr[index] = bufwr[index] & wr_rr & ~chk_p;
-		assign ddata[index] = i_aid ? aid_q : wdata;
+		assign enbwr[index] = (bufwr[index] & wr_rr & ~chk_p) |
+			(wr_rr & i_rim);
+		assign ddata[index] = i_aid ? aid_q : (i_rim ? int_q : wdata);
 		zbuffer bufz (bufr2[index],spl_q,rdreg);
 	end else begin
 		assign enbwr[index] = (bufwr[index] & wr_rr) |
@@ -374,6 +385,8 @@ end
 endgenerate
 register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
 register temp_reg (clk,1'b0,enb_d,dtemp,rtemp);
+assign int_d = qdata[REG_A];
+register intr_reg (clk,1'b0,enb_i,int_d,int_q);
 decoder wrdec (addwr,bufwr);
 decoder rddec (addrd,bufrd);
 decoder r2dec (addr2,bufr2);

@@ -118,7 +118,7 @@ task deassemble;
 						end
 					endcase
 				end else if (inst[2:0]===3'b001) begin
-					if (rinst[3]) $write("dad %s\n",decode_rpr(inst[5:4]));
+					if (inst[3]) $write("dad %s\n",decode_rpr(inst[5:4]));
 					else $write("lxi %s,dat16\n",decode_rpr(inst[5:4]));
 				end else if (inst[2:0]===3'b010) begin
 					case(inst[5:3])
@@ -132,7 +132,7 @@ task deassemble;
 						3'b111: $write("lda add16\n");
 					endcase
 				end else if (inst[2:0]===3'b011) begin
-					if (rinst[3]) $write("dcx %s\n",decode_rpr(inst[5:4]));
+					if (inst[3]) $write("dcx %s\n",decode_rpr(inst[5:4]));
 					else $write("inx %s\n",decode_rpr(inst[5:4]));
 				end else if (inst[2:0]===3'b100) begin
 					$write("inr %s\n",decode_reg(inst[5:3]));
@@ -203,7 +203,7 @@ task deassemble;
 						3'b000: $write("pop %s\n",decode_rpx(inst[5:4]));
 						3'b001: $write("ret\n");
 						3'b010: $write("pop %s\n",decode_rpx(inst[5:4]));
-						3'b011: $write("NOT USED!\n"); $finish;
+						3'b011: begin $write("NOT USED!\n"); $finish; end
 						3'b100: $write("pop %s\n",decode_rpx(inst[5:4]));
 						3'b101: $write("pchl\n");
 						3'b110: $write("pop %s\n",decode_rpx(inst[5:4]));
@@ -212,7 +212,7 @@ task deassemble;
 				end else if (inst[2:0]===3'b011) begin
 					case(inst[5:3])
 						3'b000: $write("jmp add16\n");
-						3'b001: $write("NOT USED!\n"); $finish;
+						3'b001: begin $write("NOT USED!\n"); $finish; end
 						3'b010: $write("out port8\n");
 						3'b011: $write("in port8\n");
 						3'b100: $write("xthl\n");
@@ -225,11 +225,11 @@ task deassemble;
 						3'b000: $write("push %s\n",decode_rpx(inst[5:4]));
 						3'b001: $write("call add16\n");
 						3'b010: $write("push %s\n",decode_rpx(inst[5:4]));
-						3'b011: $write("NOT USED!\n"); $finish;
+						3'b011: begin $write("NOT USED!\n"); $finish; end
 						3'b100: $write("push %s\n",decode_rpx(inst[5:4]));
-						3'b101: $write("NOT USED!\n"); $finish;
+						3'b101: begin $write("NOT USED!\n"); $finish; end
 						3'b110: $write("push %s\n",decode_rpx(inst[5:4]));
-						3'b111: $write("NOT USED!\n"); $finish;
+						3'b111: begin $write("NOT USED!\n"); $finish; end
 					endcase
 				end else if (inst[2:0]===3'b111) begin
 					$write("rst %g\n",inst[5:3]);
@@ -293,7 +293,8 @@ always @(posedge rd_) begin
 end
 
 // detect register change
-always @(dut.proc.qdata or dut.proc.spout) begin // or dut.proc.pcout
+always @(dut.proc.qdata or dut.proc.spout or
+		dut.proc.int_q) begin // or dut.proc.pcout
 	$write("[%04g] REGS: ", $time/CLKPTIME);
 	$write("[B:%h] [C:%h] ", dut.proc.qdata[0], dut.proc.qdata[1]);
 	$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
@@ -305,7 +306,8 @@ always @(dut.proc.qdata or dut.proc.spout) begin // or dut.proc.pcout
 	//$write("[H:%h] [L:%h] ", dut.proc.ddata[4], dut.proc.ddata[5]);
 	//$write("[F:%h] [A:%h]\n", dut.proc.ddata[6], dut.proc.ddata[7]);
 	$write("[%04g] REGS: ", $time/CLKPTIME);
-	$write("[I:%h] [T:%h] ", dut.proc.rinst, dut.proc.rtemp);
+	$write("[I:%h] [T:%h] [S:%h] ", dut.proc.rinst, dut.proc.rtemp,
+		dut.proc.int_q);
 	$write("[PD:%h] ", dut.proc.pdout);
 	$write("[PC:%h] [SP:%h]\n", dut.proc.pcout, dut.proc.spout);
 end

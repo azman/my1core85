@@ -19,7 +19,11 @@ Completion Progress:
   = {{inr reg},{inr m},{dcr reg},{dcr m}} completed (16)
   = {{lxi rp,dat16},{dad rp}} completed (8)
   = {{inx rp},{dcx rp}} completed (8)
-  = {{00xxxx00}nop+unused} completed (4)
+  = {{00xxx000}nop+unused+rim+sim} completed (8)
   = {{stax rp},{ldax rp}} completed (4)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
+
+Note:
+
+- serial/interrupt mask register are ready (rim/sim), but not currently used
