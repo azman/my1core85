@@ -20,6 +20,8 @@ ff
 86 // 10_000_110 @ add m
 d6 // 11_010_110 @ sui m, 0e
 0e
+39 // 00_111_001 @ dad sp
+29 // 00_101_001 @ dad hl
 76 // 01_110_110 @ hlt
 @2000 // prepare data memory?
 fa

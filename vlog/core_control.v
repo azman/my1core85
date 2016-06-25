@@ -92,7 +92,7 @@ reg enb_adh, enb_adl, enb_dat, enb_ctl;
 wire do_bimc, do_last, dofirst, do_memr, do_memw, do_devr, do_devw;
 
 // control logic
-assign do_bimc = (inst[INST_DAD]|inst[INST_HLT]);
+assign do_bimc = (inst[INST_DAD]|inst[INST_HLT])&~dofirst;
 assign do_last = ~do_more[1]&do_more[0];
 assign dofirst = ~do_more[0];
 assign do_memr = ~dowrite[0]&~inst[INST_DIO];
@@ -125,7 +125,7 @@ assign opin[OPIN_ALE] = pin_ale;
 always @(cstate) begin
 	case (cstate)
 		STATE_T1: begin
-			if (do_bimc|inst[INST_DAD]) //inst[INST_DAD] always bimc?
+			if (do_bimc) //inst[INST_DAD] always bimc?
 				pin_ale <= 1'b0;
 			else
 				pin_ale <= 1'b1;

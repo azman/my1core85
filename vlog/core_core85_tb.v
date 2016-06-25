@@ -29,10 +29,10 @@ task reg_print;
 		$write("[I:%h] [T:%h] ", dut.proc.rinst, dut.proc.rtemp);
 		$write("[PC:%h] [SP:%h]\n", dut.proc.pcout, dut.proc.spout);
 		//$write("[%04g] REGS: ", $time/CLKPTIME);
-		//$write("[{ENBWR:%b}{BUFWR:%b}<WDATA:%h>] ",
-		//	dut.proc.enbwr, dut.proc.bufwr, dut.proc.wdata);
-		//$write("[(CHK_P:%b,PADDR:%b,WADDR:%b)]\n",
-		//	dut.proc.chk_p, dut.proc.paddr, dut.proc.waddr);
+		//$write("[{OP1:%h}{OP2:%h}{RES:%h}] ",
+		//	dut.proc.op1_d, dut.proc.op2_d, dut.proc.res_d);
+		//$write("[{BUFWR:%b}<WDATA:%h>]\n",
+		//	dut.proc.bufwr, dut.proc.wdata);
 	end
 endtask
 
@@ -81,9 +81,9 @@ task deassemble;
 					$write("inr %s\n",decode_reg(inst[5:3]));
 				end else if (inst[2:0]===3'b101) begin
 					$write("dcr %s\n",decode_reg(inst[5:3]));
-				end else if (inst[3:0]===3'b0001) begin
+				end else if (inst[3:0]===4'b0001) begin
 					$write("lxi %s,dat16\n",decode_rpr(inst[5:4]));
-				end else if (inst[3:0]===3'b1001) begin
+				end else if (inst[3:0]===4'b1001) begin
 					$write("dad %s\n",decode_rpr(inst[5:4]));
 				end else begin
 					$write("UNKNOWN! %b\n",inst);

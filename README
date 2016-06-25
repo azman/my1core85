@@ -17,6 +17,6 @@ Completion Progress:
 - Instructions (00xxxxxx) in progress
   = {{mvi reg,data},{mvi m,data}} completed (8)
   = {{inr reg},{inr m},{dcr reg},{dcr m}} completed (16)
-  = {{lxi rp,dat16}} completed (4)
+  = {{lxi rp,dat16},{dad rp} completed (8)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
