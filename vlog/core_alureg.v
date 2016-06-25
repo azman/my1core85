@@ -31,7 +31,7 @@ parameter IENB_OFF = 3; // bus enable signals
 parameter IENB_RRD = 0;
 parameter IENB_RWR = 1;
 parameter IENB_COD = 2;
-parameter IENB_DAT = 3;
+parameter IENB_EXT = 3; // extended cycle period
 parameter IENB_PC_ = 4;
 parameter IENB_PD_ = 5; // data rw cycle - do not use pc!
 parameter IENB_NXT = 6; // select bit for reg pair
@@ -64,11 +64,11 @@ wire[ADDRSIZE-1:0] chk_a;
 
 // internal wiring
 wire enb_r, enb_w, enb_c, enb_d, sel_p;
-wire enbpc, ensph, enspl, use_d;
+wire enbpc, ensph, enspl, use_d, ixsel;
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic;
 wire i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad;
+wire i_tmp, i_dad, i_xid, i_nop;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -85,14 +85,18 @@ reg flags;
 // reg block signals
 wire[DATASIZE-1:0] wdata, rdata, rdreg, mdata;
 wire[REGSBITS-1:0] waddr, paddr, xaddr, addwr, addrd, addr2;
-wire wr_rr, rd_rr, wr_fl;
-wire[ADDRSIZE-1:0] pcinc, pcout, pdout, spout;
-wire[DATASIZE-1:0] pcflg, sph_d, spl_d, sph_q, spl_q;
+wire wr_rr, rd_rr, wr_rp, wr_fl;
+wire[PAIRSIZE-1:0] pcout, pdout, spout;
+wire[PAIRSIZE-1:0] rpout, ixout, ixdat;
+wire[REGPBITS-1:0] rpadd;
+wire[DATASIZE-1:0] sph_d, spl_d, sph_q, spl_q, dflag;
 // 'internals'
-wire[DATASIZE-1:0] ddata[REGCOUNT-1:0],qdata[REGCOUNT-1:0];
-wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd, bufr2;
+wire[DATASIZE-1:0] ddata[REGCOUNT-1:0], qdata[REGCOUNT-1:0];
+wire[DATASIZE-1:0] tdata[REGCOUNT-1:0], xdata[REGCOUNT-1:0];
+wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd, bufr2, bufix;
+wire[REGPSIZE-1:0] buf2x;
 // write to reg-pair always byte-by-byte! not in byte-pairs!
-wire[PAIRSIZE-1:0] prdat[REGPSIZE-1:0];
+wire[PAIRSIZE-1:0] rpdat[REGPSIZE-1:0];
 wire[DATASIZE-1:0] rinst, rtemp, dtemp;
 
 // alu block signals
@@ -104,11 +108,11 @@ wire[REGSBITS-1:0] selop;
 assign enb_r = ienb[IENB_RRD];
 assign enb_w = ienb[IENB_RWR] & ~i_tmp;
 assign enb_c = ienb[IENB_COD];
-assign enb_d = ienb[IENB_RWR] & i_tmp; //i_aid ? enb_w : ienb[IENB_DAT];
+assign enb_d = ienb[IENB_RWR] & i_tmp;
 assign sel_p = ienb[IENB_NXT];
 assign enbpc = ienb[IENB_PC_];
-assign ensph = bufwr[REG_F] & wr_rr & i_lxi;
-assign enspl = bufwr[REG_A] & wr_rr & i_lxi;
+assign ensph = (bufwr[REG_F] & wr_rr & i_lxi)|(bufix[REG_F] & wr_rp);
+assign enspl = (bufwr[REG_A] & wr_rr & i_lxi)|(bufix[REG_A] & wr_rp);
 assign use_d = ienb[IENB_PD_];
 
 // top 2-bits instruction decoding
@@ -153,13 +157,16 @@ assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & mem_s; // alu immediate
 assign chk_p = //i_lxi|i_dad;
-//	(i_txa & lo011) | // inx, dcx (8)
+	(i_txa & lo011) | // inx, dcx (8)
 	(i_txa & lo001); // dad, lxi (8)
 //	(i_txa & lo010 & hi10x); // shld, lhld (2)
 assign i_lxi = (i_txa & lo001); // dad, lxi (8)
 assign i_tmp = //(i_aid & mem_d);
 	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])); // inr,dcr,mvi m (3)
 assign i_dad = i_txa & lo001 & rinst[3];
+assign i_xid = i_txa & lo011; // increment/decrement pair
+assign i_nop = i_xid |
+	(i_txa & hi000 & lo000); // nop
 
 // assign output - decoded instruction info
 assign chk_i[INST_DAD] = i_dad;
@@ -282,11 +289,11 @@ always @(rinst) begin
 end
 assign chk_a = use_d ? pdout : pcout; // drive address bus
 assign bus_q = mem_s | i_aid ? rtemp : rdata;
-assign pdout = prdat[REGP_HL];
+assign pdout = rpdat[REGP_HL];
 assign dtemp = i_aid ? aid_q : bus_d;
 assign spout = { sph_q, spl_q };
-assign sph_d = wdata;
-assign spl_d = wdata;
+assign sph_d = i_xid ? ixout[PAIRSIZE-1:DATASIZE] : wdata;
+assign spl_d = i_xid ? ixout[DATASIZE-1:0] : wdata;
 
 // reg block connections
 assign mdata = mem_s|i_lxi ? bus_d : rdata; // if mem src, get from bus
@@ -296,16 +303,18 @@ assign xaddr = i_dad ? (sel_p?REG_L:REG_H) : REG_A;
 assign addwr = chk_p ? (i_dad?xaddr:paddr) : waddr;
 assign addrd = rinst[2:0];
 assign addr2 = chk_p ? paddr : waddr;
-assign paddr = {rinst[5:4],sel_p};
+assign rpadd = rinst[5:4];
+assign paddr = {rpadd,sel_p};
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!
 assign enbrd = bufrd & {REGCOUNT{rd_rr}};
-assign wr_rr = enb_w;
+assign wr_rr = enb_w & ~i_nop & ~ienb[IENB_EXT];
 assign rd_rr = enb_r;
-assign wr_fl = enb_w & (i_alu|i_ali|i_aid|i_dad); // on alu op & pop psw?
-assign prdat[REGP_BC] = {qdata[0],qdata[1]};
-assign prdat[REGP_DE] = {qdata[2],qdata[3]};
-assign prdat[REGP_HL] = {qdata[4],qdata[5]};
-assign prdat[REGP_SP] = {qdata[6],qdata[7]}; // only for push psw???
+assign wr_rp = enb_w & ienb[IENB_EXT];
+assign wr_fl = wr_rr & (i_alu|i_ali|i_aid|i_dad); // on alu op & pop psw?
+assign rpdat[REGP_BC] = {qdata[0],qdata[1]};
+assign rpdat[REGP_DE] = {qdata[2],qdata[3]};
+assign rpdat[REGP_HL] = {qdata[4],qdata[5]};
+assign rpdat[REGP_SP] = {qdata[6],qdata[7]}; // only for push psw???
 
 // reg block components
 genvar index;
@@ -320,12 +329,27 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 		assign ddata[index] = i_aid ? aid_q : wdata;
 		zbuffer bufz (bufr2[index],spl_q,rdreg);
 	end else begin
-		assign enbwr[index] = bufwr[index] & wr_rr;
-		assign ddata[index] = i_aid ? aid_q : wdata;
+		assign enbwr[index] = (bufwr[index] & wr_rr) |
+			(bufix[index] & wr_rp);
+		assign tdata[index] = i_aid ? aid_q : wdata;
+		assign ddata[index] = ienb[IENB_EXT] ? xdata[index] : tdata[index];
 		zbuffer bufz (bufr2[index],qdata[index],rdreg);
 	end
 	register regs (clk,1'b0,enbwr[index],ddata[index],qdata[index]);
 	zbuffer buff (enbrd[index],qdata[index],rdata);
+end
+for (index=0;index<REGPSIZE;index=index+1) begin : reg_pairs
+	if (index==REGPSIZE-1) begin
+		//zbuffer bufx (buf2x[index],sph_q,rpout[PAIRSIZE-1:DATASIZE]);
+		//zbuffer bufy (buf2x[index],spl_q,rpout[DATASIZE-1:0]);
+		zbuffer #(.DATASIZE(PAIRSIZE)) bufq (buf2x[index],spout,rpout);
+	end else begin
+		assign xdata[index*2] = ixout[PAIRSIZE-1:DATASIZE];
+		assign xdata[index*2+1] = ixout[DATASIZE-1:0];
+		//zbuffer bufx (buf2x[index],qdata[index*2],rpout[PAIRSIZE-1:DATASIZE]);
+		//zbuffer bufy (buf2x[index],qdata[index*2+1],rpout[DATASIZE-1:0]);
+		zbuffer #(.DATASIZE(PAIRSIZE)) bufq (buf2x[index],rpdat[index],rpout);
+	end
 end
 endgenerate
 register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
@@ -333,10 +357,14 @@ register temp_reg (clk,1'b0,enb_d,dtemp,rtemp);
 decoder wrdec (addwr,bufwr);
 decoder rddec (addrd,bufrd);
 decoder r2dec (addr2,bufr2);
-register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,pcinc,pcout);
+assign bufix = {{2{buf2x[3]}},{2{buf2x[2]}},{2{buf2x[1]}},{2{buf2x[0]}}};
+decoder #(.SEL_SIZE(REGPBITS)) rpdec (rpadd,buf2x);
+register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,ixout,pcout);
 register r8sph (clk,1'b0,ensph,sph_d,sph_q);
 register r8spl (clk,1'b0,enspl,spl_d,spl_q);
-incdec #(.DATASIZE(PAIRSIZE)) incpc (1'b0,pcout,pcinc,pcflg); // pcflg dummy
+assign ixsel = ienb[IENB_EXT] ? rinst[3] : 1'b0;
+assign ixdat = ienb[IENB_EXT] ? rpout : pcout;
+incdec #(.DATASIZE(PAIRSIZE)) xidrp (ixsel,ixdat,ixout,dflag); // dflag=dummy
 
 // alu block connections
 assign op1_d = i_dad ? (sel_p?qdata[REG_L]:qdata[REG_H]) : qdata[REG_A];

@@ -1,4 +1,4 @@
-module core_control_tb();
+module control_tb();
 
 parameter CLKPTIME = 10;
 parameter INSTSIZE = dut.INSTSIZE;
