@@ -32,24 +32,22 @@ assign S1 = opin[ctrl.OPIN_S1];
 assign S0 = opin[ctrl.OPIN_S0];
 assign INTA_ = opin[ctrl.OPIN_INTA_];
 assign WR_ = opin[ctrl.OPIN_WR_];
-assign RD_ = opin[ctrl.OPIN_RD_]; // should deassert on posedge!
+assign RD_ = opin[ctrl.OPIN_RD_];
 assign ALE = opin[ctrl.OPIN_ALE];
-
 // not implementing these for now
 assign HLDA = 1'b0;
 assign SOD = 1'b0;
 
 assign ADDR = oenb[ctrl.OENB_ADDH] ?
 	chk_a[ADDRSIZE-1:DATASIZE] : {DATASIZE{1'bz}};
-assign ADDRDATA = oenb[ctrl.OENB_ADDL] ? // replace bus_q signal for W!
+assign ADDRDATA = oenb[ctrl.OENB_ADDL] ?
 	chk_a[DATASIZE-1:0] : oenb[ctrl.OENB_DATA] ? bus_q : {DATASIZE{1'bz}};
 assign bus_d = (oenb[ctrl.OENB_ADDL]|oenb[ctrl.OENB_DATA]) ?
 	{DATASIZE{1'bz}} : ADDRDATA;
-
 // temporarily disabled?
 assign ipin[ctrl.IPIN_READY] = 1'b1; // always ready! READY;
 assign ipin[ctrl.IPIN_HOLD] = 1'b0; // no holding! HOLD;
-
+// local interconnect :P
 assign ienb = oenb[proc.IENB_OFF+proc.IENBSIZE-1:proc.IENB_OFF];
 
 control ctrl (~CLK, ~RST_, chk_i, ipin, oenb, opin);

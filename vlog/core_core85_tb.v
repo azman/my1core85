@@ -18,24 +18,6 @@ reg[ADDRSIZE-1:0] mem_addr;
 assign addrdata = (rd_===1'b0&&iom_===1'b0) ?
 	memory[mem_addr] : {DATASIZE{1'bz}};
 
-task reg_print;
-	begin
-		$write("[%04g] REGS: ", $time/CLKPTIME);
-		$write("[B:%h] [C:%h] ", dut.proc.qdata[0], dut.proc.qdata[1]);
-		$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
-		$write("[H:%h] [L:%h] ", dut.proc.qdata[4], dut.proc.qdata[5]);
-		$write("[F:%h] [A:%h]\n", dut.proc.qdata[6], dut.proc.qdata[7]);
-		$write("[%04g] REGS: ", $time/CLKPTIME);
-		$write("[I:%h] [T:%h] ", dut.proc.rinst, dut.proc.rtemp);
-		$write("[PC:%h] [SP:%h]\n", dut.proc.pcout, dut.proc.spout);
-		//$write("[%04g] REGS: ", $time/CLKPTIME);
-		//$write("[{OP1:%h}{OP2:%h}{RES:%h}] ",
-		//	dut.proc.op1_d, dut.proc.op2_d, dut.proc.res_d);
-		//$write("[{BUFWR:%b}<WDATA:%h>]\n",
-		//	dut.proc.bufwr, dut.proc.wdata);
-	end
-endtask
-
 function[7:0] decode_reg;
 	input[2:0] radd;
 	reg[7:0] text;
@@ -104,7 +86,7 @@ task deassemble;
 	input[7:0] inst;
 	reg[8-1:0] text;
 	begin
-		$write("[%04g] ==> INST {%b}: ", $time/CLKPTIME,inst);
+		$write("==> ");
 		case(inst[7:6])
 			2'b00: begin
 				if (inst[2:0]===3'b000) begin
@@ -242,13 +224,6 @@ task deassemble;
 	end
 endtask
 
-task mem_print;
-	input[ADDRSIZE-1:0] addr;
-	begin
-		$write("[%04g] MEM@%h: %h\n", $time/CLKPTIME, addr, memory[addr]);
-	end
-endtask
-
 // reset block
 initial begin
 	$readmemh("memory.txt",memory);
@@ -274,7 +249,7 @@ always @(ale) begin
 	end
 end
 
-// memory writes
+// detect memory writes
 always @(posedge wr_) begin
 	if (iom_===1'b0) begin
 		$write("[%04g] WR MEM@%h: %h => ", $time/CLKPTIME,
@@ -284,7 +259,7 @@ always @(posedge wr_) begin
 	end
 end
 
-// memory writes
+// detect memory reads
 always @(posedge rd_) begin
 	if (iom_===1'b0) begin // &&s0===1'b0
 		$write("[%04g] RD MEM@%h: %h\n", $time/CLKPTIME,
@@ -293,35 +268,21 @@ always @(posedge rd_) begin
 end
 
 // detect register change
-always @(dut.proc.qdata or dut.proc.spout or
-		dut.proc.int_q) begin // or dut.proc.pcout
+always @(dut.proc.qdata or dut.proc.rtemp or dut.proc.int_q
+		or dut.proc.spout) begin // or dut.proc.pcout
 	$write("[%04g] REGS: ", $time/CLKPTIME);
 	$write("[B:%h] [C:%h] ", dut.proc.qdata[0], dut.proc.qdata[1]);
 	$write("[D:%h] [E:%h] ", dut.proc.qdata[2], dut.proc.qdata[3]);
 	$write("[H:%h] [L:%h] ", dut.proc.qdata[4], dut.proc.qdata[5]);
 	$write("[F:%h] [A:%h]\n", dut.proc.qdata[6], dut.proc.qdata[7]);
-	//$write("[DEBUG] ENBWR: %b ", dut.proc.enbwr);
-	//$write("[B:%h] [C:%h] ", dut.proc.ddata[0], dut.proc.ddata[1]);
-	//$write("[D:%h] [E:%h] ", dut.proc.ddata[2], dut.proc.ddata[3]);
-	//$write("[H:%h] [L:%h] ", dut.proc.ddata[4], dut.proc.ddata[5]);
-	//$write("[F:%h] [A:%h]\n", dut.proc.ddata[6], dut.proc.ddata[7]);
 	$write("[%04g] REGS: ", $time/CLKPTIME);
-	$write("[I:%h] [T:%h] [S:%h] ", dut.proc.rinst, dut.proc.rtemp,
-		dut.proc.int_q);
-	$write("[PD:%h] ", dut.proc.pdout);
+	$write("[T:%h] [S:%h] ", dut.proc.rtemp, dut.proc.int_q);
 	$write("[PC:%h] [SP:%h]\n", dut.proc.pcout, dut.proc.spout);
 end
 
-// check on register value on every T1 state
-//always @(dut.ctrl.cstate[1]) begin
-//	if (dut.ctrl.cstate[1]) begin
-//		reg_print;
-//		mem_print(16'h2000);
-//	end
-//end
-
-// detect instruction new instruction
+// detect new instruction
 always @(dut.proc.rinst) begin
+	$write("[%04g] CODE: [I:%h] ", $time/CLKPTIME, dut.proc.rinst);
 	deassemble(dut.proc.rinst);
 end
 

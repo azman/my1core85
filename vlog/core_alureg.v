@@ -91,7 +91,7 @@ reg flags, q_ale, q_rwi;
 wire[DATASIZE-1:0] wdata, rdata, rdreg, mdata;
 wire[REGSBITS-1:0] waddr, paddr, xaddr, addwr, addrd, addr2;
 wire wr_rr, rd_rr, wr_rp, wr_fl;
-wire[PAIRSIZE-1:0] pcout, pdout, spout, mxout;
+wire[PAIRSIZE-1:0] pcout, spout;
 wire[PAIRSIZE-1:0] rpout, ixout, ixdat;
 wire[REGPBITS-1:0] rpadd;
 wire[DATASIZE-1:0] sph_d, spl_d, sph_q, spl_q, dflag;
@@ -108,7 +108,8 @@ wire enb_i;
 wire[DATASIZE-1:0] int_d, int_q;
 
 // alu block signals
-wire[DATASIZE-1:0] op1_d, op2_d, res_d, rflag, xflag, wflag;
+wire[DATASIZE-1:0] op1_d, op2_d, res_d, op1_x;
+wire[DATASIZE-1:0] rflag, wflag, cflag, zflag, xflag;
 wire[DATASIZE-1:0] aid_d, aid_q, aid_f;
 wire[REGSBITS-1:0] selop;
 
@@ -316,14 +317,22 @@ always @(rinst) begin
 		3'b111: flags = qdata[REG_F][FLAGBITS]; // M
 	endcase
 end
-assign chk_a = use_d ? pdout : pcout; // drive address bus
 assign bus_q = i_acc ? qdata[REG_A] : (mem_s | i_aid ? rtemp : rdata);
-assign pdout = i_mmx ? mxout : rpdat[REGP_HL];
-assign mxout = rinst[4] ? rpdat[REGP_DE] : rpdat[REGP_BC];
 assign dtemp = i_aid ? aid_q : bus_d;
 assign spout = { sph_q, spl_q };
 assign sph_d = i_xid ? ixout[PAIRSIZE-1:DATASIZE] : wdata;
 assign spl_d = i_xid ? ixout[DATASIZE-1:0] : wdata;
+
+// drive address bus (chk_a)
+wire usepc, usemm, usem0, usem1;
+assign usepc = ~use_d;
+assign usemm = ~i_mmx & use_d;
+assign usem0 = i_mmx & use_d & ~rinst[4];
+assign usem1 = i_mmx & use_d & rinst[4];
+zbuffer #(PAIRSIZE) add0 (usepc,pcout,chk_a);
+zbuffer #(PAIRSIZE) add1 (usemm,rpdat[REGP_HL],chk_a);
+zbuffer #(PAIRSIZE) add3 (usem1,rpdat[REGP_DE],chk_a);
+zbuffer #(PAIRSIZE) add4 (usem0,rpdat[REGP_BC],chk_a);
 
 // reg block connections
 assign mdata = mem_s|i_lxi|i_acc ? bus_d : rdata; // if mem src, get from bus
@@ -400,11 +409,14 @@ assign ixdat = ienb[IENB_EXT] ? rpout : pcout;
 incdec #(.DATASIZE(PAIRSIZE)) xidrp (ixsel,ixdat,ixout,dflag); // dflag=dummy
 
 // alu block connections
-assign op1_d = i_dad ? (sel_p?qdata[REG_L]:qdata[REG_H]) : qdata[REG_A];
+assign op1_x = sel_p ? qdata[REG_L] : qdata[REG_H];
+assign op1_d = i_dad ? op1_x : qdata[REG_A];
 assign op2_d = i_dad ? rdreg : mdata;
 assign selop = i_dad ? 3'b001 : rinst[5:3];
-assign rflag = i_dad & sel_p ? (qdata[REG_F]&~FLAGMSKC) : qdata[REG_F];
-assign xflag = i_dad ? ((wflag&FLAGMSKC)|(qdata[REG_F]&~FLAGMSKC)) : wflag;
+assign cflag = qdata[REG_F] & ~FLAGMSKC; // mask out c (c=0)
+assign rflag = i_dad & sel_p ? cflag : qdata[REG_F];
+assign zflag = (wflag & FLAGMSKC) | (qdata[REG_F] & ~FLAGMSKC); // new c only!
+assign xflag = i_dad ? zflag : wflag;
 assign aid_d = mem_d ? bus_d : rdreg;
 
 // alu block components
