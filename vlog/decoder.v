@@ -1,9 +1,9 @@
 module decoder (iS, oY);
 
-parameter ONE_COLD = 0;
 parameter SEL_SIZE = 3;
 parameter OUT_SIZE = 2**SEL_SIZE;
 parameter CHK_SIZE = OUT_SIZE*SEL_SIZE;
+parameter ONE_COLD = 0;
 
 input[SEL_SIZE-1:0] iS;
 output[OUT_SIZE-1:0] oY;
