@@ -17,6 +17,7 @@ parameter REG_A = 3'b111;
 parameter REGP_BC = 3'b00;
 parameter REGP_DE = 3'b01;
 parameter REGP_HL = 3'b10;
+parameter REGP_FA = 3'b11;
 parameter REGP_SP = 3'b11;
 parameter REGPSIZE = REGCOUNT/2;
 parameter FLAGMASK = 8'b11010101;
@@ -98,7 +99,7 @@ wire[DATASIZE-1:0] sph_d, spl_d, sph_q, spl_q, dflag;
 // 'internals'
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0], qdata[REGCOUNT-1:0];
 wire[DATASIZE-1:0] tdata[REGCOUNT-1:0], xdata[REGCOUNT-1:0];
-wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd, bufr2, bufix;
+wire[REGCOUNT-1:0] enbwr, enbrd, bufwr, bufrd, bufr2;
 wire[REGPSIZE-1:0] buf2x;
 // write to reg-pair always byte-by-byte! not in byte-pairs!
 wire[PAIRSIZE-1:0] rpdat[REGPSIZE-1:0];
@@ -132,9 +133,6 @@ assign enb_i = ienb[IENB_RWR] & i_sim;
 assign enb_c = ienb[IENB_COD];
 assign enb_d = ienb[IENB_RWR] & i_tmp; // write to temp register
 assign sel_p = ienb[IENB_NXT];
-assign enbpc = ienb[IENB_PC_];
-assign ensph = (bufwr[REG_F] & wr_rr & i_lxi)|(bufix[REG_F] & wr_rp);
-assign enspl = (bufwr[REG_A] & wr_rr & i_lxi)|(bufix[REG_A] & wr_rp);
 assign use_d = ienb[IENB_PD_];
 
 // top 2-bits instruction decoding
@@ -317,11 +315,15 @@ always @(rinst) begin
 		3'b111: flags = qdata[REG_F][FLAGBITS]; // M
 	endcase
 end
-assign bus_q = i_acc ? qdata[REG_A] : (mem_s | i_aid ? rtemp : rdata);
-assign dtemp = i_aid ? aid_q : bus_d;
-assign spout = { sph_q, spl_q };
-assign sph_d = i_xid ? ixout[PAIRSIZE-1:DATASIZE] : wdata;
-assign spl_d = i_xid ? ixout[DATASIZE-1:0] : wdata;
+
+// drive data bus (bus_q)
+wire dat_a, dat_t, dat_r;
+assign dat_a = i_acc;
+assign dat_t = (mem_s | i_aid) & ~i_acc;
+assign dat_r = ~(mem_s | i_aid) & ~i_acc;
+zbuffer dat0 (dat_a,qdata[REG_A],bus_q);
+zbuffer dat1 (dat_t,rtemp,bus_q);
+zbuffer dat2 (dat_r,rdata,bus_q);
 
 // drive address bus (chk_a)
 wire usepc, usemm, usem0, usem1;
@@ -353,9 +355,8 @@ assign wr_fl = wr_rr & (i_alu|i_ali|i_aid|i_dad); // on alu op & pop psw?
 assign rpdat[REGP_BC] = {qdata[0],qdata[1]};
 assign rpdat[REGP_DE] = {qdata[2],qdata[3]};
 assign rpdat[REGP_HL] = {qdata[4],qdata[5]};
-assign rpdat[REGP_SP] = {qdata[6],qdata[7]}; // only for push psw???
-
-// reg block components
+assign rpdat[REGP_FA] = {qdata[6],qdata[7]}; // only for push psw???
+// reg block components - main block
 genvar index;
 generate
 for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
@@ -369,8 +370,7 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 		assign ddata[index] = i_aid ? aid_q : (i_rim ? int_q : wdata);
 		zbuffer bufz (bufr2[index],spl_q,rdreg);
 	end else begin
-		assign enbwr[index] = (bufwr[index] & wr_rr) |
-			(bufix[index] & wr_rp);
+		assign enbwr[index] = (bufwr[index] & wr_rr) | (buf2x[index/2] & wr_rp);
 		assign tdata[index] = i_aid ? aid_q : wdata;
 		assign ddata[index] = ienb[IENB_EXT] ? xdata[index] : tdata[index];
 		zbuffer bufz (bufr2[index],qdata[index],rdreg);
@@ -380,33 +380,46 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 end
 for (index=0;index<REGPSIZE;index=index+1) begin : reg_pairs
 	if (index==REGPSIZE-1) begin
-		//zbuffer bufx (buf2x[index],sph_q,rpout[PAIRSIZE-1:DATASIZE]);
-		//zbuffer bufy (buf2x[index],spl_q,rpout[DATASIZE-1:0]);
-		zbuffer #(.DATASIZE(PAIRSIZE)) bufq (buf2x[index],spout,rpout);
+		zbuffer #(PAIRSIZE) bufq (buf2x[index],spout,rpout);
 	end else begin
 		assign xdata[index*2] = ixout[PAIRSIZE-1:DATASIZE];
 		assign xdata[index*2+1] = ixout[DATASIZE-1:0];
-		//zbuffer bufx (buf2x[index],qdata[index*2],rpout[PAIRSIZE-1:DATASIZE]);
-		//zbuffer bufy (buf2x[index],qdata[index*2+1],rpout[DATASIZE-1:0]);
-		zbuffer #(.DATASIZE(PAIRSIZE)) bufq (buf2x[index],rpdat[index],rpout);
+		zbuffer #(PAIRSIZE) bufq (buf2x[index],rpdat[index],rpout);
 	end
 end
 endgenerate
-register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
-register temp_reg (clk,1'b0,enb_d,dtemp,rtemp);
-assign int_d = qdata[REG_A];
-register intr_reg (clk,1'b0,enb_i,int_d,int_q);
 decoder wrdec (addwr,bufwr);
 decoder rddec (addrd,bufrd);
 decoder r2dec (addr2,bufr2);
-assign bufix = {{2{buf2x[3]}},{2{buf2x[2]}},{2{buf2x[1]}},{2{buf2x[0]}}};
-decoder #(.SEL_SIZE(REGPBITS)) rpdec (rpadd,buf2x);
-register #(.DATASIZE(PAIRSIZE)) r16pc (clk,rst_,enbpc,ixout,pcout);
+decoder #(REGPBITS) rpdec (rpadd,buf2x);
+// reg block components - instruction register
+register inst_reg (clk,rst_,enb_c,bus_d,rinst); // reset to NOP?
+// reg block connections - temp register
+assign dtemp = i_aid ? aid_q : bus_d;
+// reg block components - temp register
+register temp_reg (clk,1'b0,enb_d,dtemp,rtemp);
+// reg block connections - interrupt mask register (with serial)
+assign int_d = qdata[REG_A];
+// reg block components - interrupt mask register (with serial)
+register intr_reg (clk,1'b0,enb_i,int_d,int_q);
+// reg block connections - program counter
+assign enbpc = ienb[IENB_PC_];
+// reg block components - program counter
+register #(PAIRSIZE) r16pc (clk,rst_,enbpc,ixout,pcout);
+// reg block connections - stack pointer
+assign ensph = (bufwr[REG_F] & wr_rr & i_lxi)|(buf2x[REGP_FA] & wr_rp);
+assign enspl = (bufwr[REG_A] & wr_rr & i_lxi)|(buf2x[REGP_FA] & wr_rp);
+assign sph_d = i_xid ? ixout[PAIRSIZE-1:DATASIZE] : wdata;
+assign spl_d = i_xid ? ixout[DATASIZE-1:0] : wdata;
+assign spout = { sph_q, spl_q };
+// reg block components - stack pointer
 register r8sph (clk,1'b0,ensph,sph_d,sph_q);
 register r8spl (clk,1'b0,enspl,spl_d,spl_q);
+// reg block connections - 16-bit inc/dec
 assign ixsel = ienb[IENB_EXT] ? rinst[3] : 1'b0;
 assign ixdat = ienb[IENB_EXT] ? rpout : pcout;
-incdec #(.DATASIZE(PAIRSIZE)) xidrp (ixsel,ixdat,ixout,dflag); // dflag=dummy
+// reg block components - 16-bit inc/dec
+incdec #(PAIRSIZE) xidrp (ixsel,ixdat,ixout,dflag); // dflag=dummy
 
 // alu block connections
 assign op1_x = sel_p ? qdata[REG_L] : qdata[REG_H];
@@ -418,7 +431,6 @@ assign rflag = i_dad & sel_p ? cflag : qdata[REG_F];
 assign zflag = (wflag & FLAGMSKC) | (qdata[REG_F] & ~FLAGMSKC); // new c only!
 assign xflag = i_dad ? zflag : wflag;
 assign aid_d = mem_d ? bus_d : rdreg;
-
 // alu block components
 alu alu_block (selop,op1_d,op2_d,rflag,res_d,wflag);
 incdec aid_block (rinst[0],aid_d,aid_q,aid_f);
