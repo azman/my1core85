@@ -232,6 +232,9 @@ initial begin
 	//	$display("[DEBUG] %d:%h",loop,memory[loop]);
 	//end
 	clk = 1'b0; rst = 1'b1; // power-on reset
+	ready = 1'b0; hold = 1'b0; sid =  1'b0; // not implemented for now
+	intr =  1'b0; trap =  1'b0; // no interrupts for now
+	rst75 =  1'b0; rst65 =  1'b0; rst55 =  1'b0;
 	#(CLKPTIME*3) rst = 1'b0; // 3-clock cycle reset
 	//$monitor("[%04g] STATE: %b {%b,%b} [%h][%h]",$time/CLKPTIME,
 	//	dut.ctrl.cstate,dut.oenb,dut.opin,addr,addrdata);

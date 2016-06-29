@@ -26,4 +26,4 @@ Completion Progress:
 
 Note:
 
-- serial/interrupt mask register are ready (rim/sim), but not currently used
+- serial/interrupt mask register is ready (rim/sim), but not currently used
