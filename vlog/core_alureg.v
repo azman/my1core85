@@ -36,9 +36,10 @@ parameter IENB_EXT = 3; // extended cycle period
 parameter IENB_PC_ = 4;
 parameter IENB_PD_ = 5; // data rw cycle - do not use pc!
 parameter IENB_NXT = 6; // select bit for reg pair
-parameter IENB_ALE = 7;
-parameter IENB_3RD = 8;
-parameter IENBSIZE = 9;
+parameter IENB_NXA = 7; // select bit for temp reg
+parameter IENB_ALE = 8;
+parameter IENB_3RD = 9;
+parameter IENBSIZE = 10;
 // instruction flags
 parameter INST_GO6 = 0;
 parameter INST_DAD = 1;
@@ -68,16 +69,17 @@ wire[INSTSIZE-1:0] chk_i;
 wire[ADDRSIZE-1:0] chk_a;
 
 // internal wiring
-wire enb_r, enb_w, enb_c, enb_d, sel_p;
+wire enb_r, enb_w, enb_c, enb_d, sel_p, sel_q;
 wire enbpc, ensph, enspl, use_d, ixsel;
+wire entph, entpl;
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad, i_xid, i_nop, i_mmx, i_acc, i_imk;
-wire i_rim, i_sim;
+wire i_tmp, i_dad, i_xid, i_nop, i_mmx, i_mmt, i_acc, i_imk;
+wire i_rim, i_sim, i_lda, i_sta;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
-wire hi000, hi001, hi010, hi011, hi100, hi110;
+wire hi000, hi001, hi010, hi011, hi100, hi110, hi111;
 wire hi00x, hi01x, hi10x, hi11x;
 wire hi0x0, hi0x1, hi1x0, hi1x1;
 wire mem_d, mem_s, chk_p;
@@ -92,10 +94,11 @@ reg flags, q_ale, q_rwi;
 wire[DATASIZE-1:0] wdata, rdata, rdreg, mdata;
 wire[REGSBITS-1:0] waddr, paddr, xaddr, addwr, addrd, addr2;
 wire wr_rr, rd_rr, wr_rp, wr_fl;
-wire[PAIRSIZE-1:0] pcout, spout;
+wire[PAIRSIZE-1:0] pcout, spout, tpout;
 wire[PAIRSIZE-1:0] rpout, ixout, ixdat;
 wire[REGPBITS-1:0] rpadd;
 wire[DATASIZE-1:0] sph_d, spl_d, sph_q, spl_q, dflag;
+wire[DATASIZE-1:0] tph_d, tpl_d, tph_q, tpl_q;
 // 'internals'
 wire[DATASIZE-1:0] ddata[REGCOUNT-1:0], qdata[REGCOUNT-1:0];
 wire[DATASIZE-1:0] tdata[REGCOUNT-1:0], xdata[REGCOUNT-1:0];
@@ -133,6 +136,7 @@ assign enb_i = ienb[IENB_RWR] & i_sim;
 assign enb_c = ienb[IENB_COD];
 assign enb_d = ienb[IENB_RWR] & i_tmp; // write to temp register
 assign sel_p = ienb[IENB_NXT];
+assign sel_q = ienb[IENB_NXA];
 assign use_d = ienb[IENB_PD_];
 
 // top 2-bits instruction decoding
@@ -151,6 +155,7 @@ assign hi010 = ~rinst[5] & rinst[4] & ~rinst[3];
 assign hi011 = ~rinst[5] & rinst[4] & rinst[3];
 assign hi100 = rinst[5] & ~rinst[4] & ~rinst[3];
 assign hi110 = rinst[5] & rinst[4] & ~rinst[3];
+assign hi111 = rinst[5] & rinst[4] & rinst[3];
 assign hi00x = ~rinst[5] & ~rinst[4];
 assign hi01x = ~rinst[5] & rinst[4]; // 01x - io inst sig 2
 assign hi10x = rinst[5] & ~rinst[4];
@@ -187,11 +192,14 @@ assign i_tmp = //(i_aid & mem_d);
 assign i_dad = i_txa & lo001 & rinst[3];
 assign i_xid = i_txa & lo011; // increment/decrement pair
 assign i_nop = i_xid | (i_txa & hi000 & lo000); // nop
-assign i_mmx = (i_txa & lo010 & ~rinst[2]); // ldax,stax (4)
-assign i_acc = i_mmx;
+assign i_mmx = (i_txa & lo010 & ~rinst[5]); // ldax,stax (4)
+assign i_acc = i_mmx | i_mmt;
 assign i_imk = i_rim | i_sim;
 assign i_rim = (i_txa & hi100 & lo000);
 assign i_sim = (i_txa & hi110 & lo000);
+assign i_mmt = i_sta | i_lda;
+assign i_sta = (i_txa & hi110 & lo010);
+assign i_lda = (i_txa & hi111 & lo010);
 
 // assign output - decoded instruction info
 assign chk_i[INST_DAD] = i_dad;
@@ -224,7 +232,7 @@ assign cyc_1 = // 148 instructions (5 unused)
 	(i_alu & ~mem_s); // all alu with no m (56)
 assign cyc_2 = // 42 instructions
 	(i_txa & lo110 & ~hi110) | // mvi with no m (7)
-	(i_txa & lo010 & ~rinst[2]) | // ldax,stax (4)
+	(i_txa & lo010 & ~rinst[5]) | // ldax,stax (4)
 	(i_sic & lo110 ) | // alu immediate (8)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s) | // all alu with m (8)
@@ -237,7 +245,7 @@ assign cycw2 =
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
-	(i_txa & lo010 & ~rinst[2]) | // ldax,stax (4)
+	(i_txa & lo010 & ~rinst[5]) | // ldax,stax (4)
 	(i_txa & hi110 & lo10x) | // inr,dcr m (2)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s); // all alu with m (8)
@@ -262,7 +270,7 @@ assign cycw3 = // sub:16-instructions
 assign cycd3 =
 	(i_txa & hi110 & rinst[2] & ~(rinst[1]&rinst[0])); // inr,dcr,mvi m (3)
 assign cyc_4 = // 2 instructions
-	(i_txa & lo010 & hi11x); // sta,lda (2)
+	(i_mmt); // sta,lda (2)
 assign cycw4 =
 	// cyc_5
 	(i_sic & lo010) | // cccc (8)
@@ -271,7 +279,8 @@ assign cycw4 =
 	(i_txa & lo010 & hi100) | // shld (1)
 	// cyc_4 - sub:1-instruction
 	(i_txa & lo010 & hi110); // sta (1)
-assign cycd4 = 1'b0;
+assign cycd4 =
+	(i_mmt); // sta,lda (2)
 assign cyc_5 = // 12 instructions
 	// conditionals
 	(i_sic & lo010) | // cccc (8)
@@ -326,15 +335,17 @@ zbuffer dat1 (dat_t,rtemp,bus_q);
 zbuffer dat2 (dat_r,rdata,bus_q);
 
 // drive address bus (chk_a)
-wire usepc, usemm, usem0, usem1;
+wire usepc, usemm, usem0, usem1,usemt;
 assign usepc = ~use_d;
-assign usemm = ~i_mmx & use_d;
+assign usemm = (~i_mmx&~i_mmt) & use_d;
 assign usem0 = i_mmx & use_d & ~rinst[4];
 assign usem1 = i_mmx & use_d & rinst[4];
+assign usemt = i_mmt & use_d;
 zbuffer #(PAIRSIZE) add0 (usepc,pcout,chk_a);
 zbuffer #(PAIRSIZE) add1 (usemm,rpdat[REGP_HL],chk_a);
 zbuffer #(PAIRSIZE) add3 (usem1,rpdat[REGP_DE],chk_a);
 zbuffer #(PAIRSIZE) add4 (usem0,rpdat[REGP_BC],chk_a);
+zbuffer #(PAIRSIZE) add5 (usemt,tpout,chk_a);
 
 // reg block connections
 assign mdata = mem_s|i_lxi|i_acc ? bus_d : rdata; // if mem src, get from bus
@@ -348,7 +359,7 @@ assign rpadd = rinst[5:4];
 assign paddr = {rpadd,sel_p};
 //assign enbwr = bufwr & {REGCOUNT{wr_rr}}; // generate these!
 assign enbrd = bufrd & {REGCOUNT{rd_rr}};
-assign wr_rr = enb_w & ~i_nop & ~ienb[IENB_EXT];
+assign wr_rr = enb_w & ~i_nop & ~ienb[IENB_EXT] & (~i_mmt|i_mmt&~sel_p);
 assign rd_rr = enb_r;
 assign wr_rp = enb_w & ienb[IENB_EXT];
 assign wr_fl = wr_rr & (i_alu|i_ali|i_aid|i_dad); // on alu op & pop psw?
@@ -366,7 +377,7 @@ for (index=0;index<REGCOUNT;index=index+1) begin : reg_block
 		zbuffer bufz (bufr2[index],sph_q,rdreg);
 	end else if (index==REG_A) begin
 		assign enbwr[index] = (bufwr[index] & wr_rr & ~chk_p) |
-			(wr_rr & i_rim);
+			(wr_rr & i_rim) | (wr_rr & i_lda);
 		assign ddata[index] = i_aid ? aid_q : (i_rim ? int_q : wdata);
 		zbuffer bufz (bufr2[index],spl_q,rdreg);
 	end else begin
@@ -415,6 +426,15 @@ assign spout = { sph_q, spl_q };
 // reg block components - stack pointer
 register r8sph (clk,1'b0,ensph,sph_d,sph_q);
 register r8spl (clk,1'b0,enspl,spl_d,spl_q);
+// reg block connections - temporary pointer
+assign entph = (enb_w & i_mmt & ~sel_q);
+assign entpl = (enb_w & i_mmt & sel_q);
+assign tph_d = bus_d;
+assign tpl_d = bus_d;
+assign tpout = { tph_q, tpl_q };
+// reg block components - temporary pointer
+register r8tph (clk,1'b0,entph,tph_d,tph_q);
+register r8tpl (clk,1'b0,entpl,tpl_d,tpl_q);
 // reg block connections - 16-bit inc/dec
 assign ixsel = ienb[IENB_EXT] ? rinst[3] : 1'b0;
 assign ixdat = ienb[IENB_EXT] ? rpout : pcout;
