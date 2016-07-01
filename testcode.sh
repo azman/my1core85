@@ -12,7 +12,8 @@ VSIMPATH="$(which $VLOGEXEC 2>/dev/null)"
 VSIMWORK="work"
 VSIM_LOG="vlog.log"
 VSIM_OPT="-c -keepstdout -l $VSIM_LOG"
-VLOG_OPT="-vlog95compat"
+VLOG_V95="-vlog95compat"
+VLOG_OPT="+incdir+vlog"
 ONE_TIME="NO"
 DO_CLEAN="NO"
 SKIPTEST="NO"
@@ -49,7 +50,7 @@ while [ "$1" != "" ]; do
 				[ -f $check ] && comps="$comps $check"
 			done
 			;;
-		--new) VLOG_OPT="" ;;
+		--vlog95) VLOG_OPT="${VLOG_OPT} ${VLOG_V95}" ;;
 		--component)
 			shift
 			check=$(echo $lcode|grep "$1")
