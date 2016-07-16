@@ -1,3 +1,46 @@
+// signals for 8085 testbench
+
+reg clk, rst, ready, hold, sid, intr, trap, rst75, rst65, rst55;
+wire[DATASIZE-1:0] addrdata;
+wire[ADDRSIZE-1:DATASIZE] addr;
+wire clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_, ale, hlda, sod;
+
+// memory model for 8085 testbench
+
+reg[DATASIZE-1:0] memory[(2**ADDRSIZE)-1:0];
+reg[ADDRSIZE-1:0] mem_addr;
+// memory address select
+assign addrdata = (rd_===1'b0&&iom_===1'b0) ?
+	memory[mem_addr] : {DATASIZE{1'bz}};
+// memory content setup
+initial begin
+	$readmemh("memory.txt",memory);
+end
+// memory address latch
+always @(ale) begin
+	if (ale) begin
+		mem_addr =  { addr, addrdata };
+	end
+end
+// memory write
+always @(posedge wr_) begin
+	if (iom_===1'b0) begin
+		$write("[%05g] WR MEM@%h: %h => ", $time,
+			mem_addr, memory[mem_addr]);
+		memory[mem_addr] = addrdata;
+		$write("%h\n", memory[mem_addr]);
+	end
+end
+// memory read
+always @(posedge rd_) begin
+	if (iom_===1'b0) begin // &&s0===1'b0
+		$write("[%05g] RD MEM@%h: %h\n", $time,
+			mem_addr, memory[mem_addr]);
+	end
+end
+
+// tasks/functions for 8085 testbench
+
 task deassemble;
 	input[7:0] inst;
 	reg[8-1:0] text;
