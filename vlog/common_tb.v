@@ -20,6 +20,8 @@ end
 always @(ale) begin
 	if (ale) begin
 		mem_addr =  { addr, addrdata };
+	//end else begin
+	//	$write("[%05g] LATCHED ADDR = %h\n", $time, mem_addr);
 	end
 end
 // memory write

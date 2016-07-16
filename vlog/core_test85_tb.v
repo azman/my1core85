@@ -24,7 +24,7 @@ always begin
 end
 
 // detect register change //or dut.pcpc_q
-always @(dut.rgq or dut.temp_q or dut.intr_q or dut.sptr_q) begin
+always @(dut.rgq or dut.temp_q or dut.intr_q or dut.sptr_q or dut.tptr_q) begin
 	$write("[%05g] REGS: ", $time);
 	$write("[B:%h] [C:%h] ", dut.rgq[0], dut.rgq[1]);
 	$write("[D:%h] [E:%h] ", dut.rgq[2], dut.rgq[3]);
@@ -32,14 +32,14 @@ always @(dut.rgq or dut.temp_q or dut.intr_q or dut.sptr_q) begin
 	$write("[F:%h] [A:%h]\n", dut.rgq[6], dut.rgq[7]);
 	$write("[%05g] REGS: ", $time);
 	$write("[T:%h] [I:%h] ", dut.temp_q, dut.intr_q);
-	$write("[PC:%h] [SP:%h]\n", dut.pcpc_q, dut.sptr_q);
+	$write("[PC:%h] [SP:%h] [TP:%h]\n", dut.pcpc_q, dut.sptr_q, dut.tptr_q);
 end
 
 // detect new state (alternative to using monitor)
-//always @(dut.cstate) begin
+always @(dut.cstate) begin
 //	$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
 //		dut.cstate, dut.stactl,addr,addrdata,dut.busd_d,dut.busd_q);
-//end
+end
 
 // detect new instruction
 always @(dut.ireg_q) begin
@@ -49,8 +49,10 @@ end
 
 // more than 1 cycle?
 always @(dut.cycgo) begin
-	$write("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
-		dut.cycrw, dut.cyccd);
+	if(dut.cycgo!=={4{1'b0}}) begin
+		$write("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
+			dut.cycrw, dut.cyccd);
+	end
 end
 
 // detect stop condition
@@ -62,8 +64,7 @@ end
 
 // fail-safe stop condition
 always begin
-	//#2000 $finish;
-	#1500 $finish;
+	#2200 $finish;
 end
 
 always @(negedge clk) begin
@@ -71,13 +72,12 @@ always @(negedge clk) begin
 	//	$time,dut.chk_adh, dut.chk_adl, dut.chk_dat);
 	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{chk_irw:%b}{chk_pcw:%b}\n",
 	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_irw, dut.chk_pcw);
-	//$strobe("[%05g] {rgr:%b}{rgw:%b}{temp_r:%b}{temp_w:%b}\n",
-	//	$time,dut.rgr, dut.rgw, dut.temp_r, dut.temp_w);
+	//$strobe("[%05g] {rgr:%b}{rgw:%b}{accu_d:%b}{accu_w:%b}\n",
+	//	$time,dut.rgr, dut.rgw, dut.accu_d, dut.accu_w);
 	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}\n",
 	//	$time,dut.rgr, dut.rgw, dut.opr1_d, dut.opr2_d);
-	//$strobe("[%05g] {usepc:%b}{usemm:%b}{usem0:%b}{usem1:%b}\n",
-	//	$time,dut.usepc, dut.usemm, dut.usem0, dut.usem1);
-	//$strobe("[%05g] {usems:%b}{usemt:%b}\n", $time,dut.usems, dut.usemt);
+	//$strobe("[%05g] {upc:%b}{umm:%b}{um0:%b}{um1:%b}{ums:%b}{umt:%b}\n",
+	//	$time,dut.usepc,dut.usemm,dut.usem0,dut.usem1,dut.usems,dut.usemt);
 end
 
 test85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,

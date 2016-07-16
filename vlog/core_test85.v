@@ -171,8 +171,8 @@ assign tptr_q = {tprh_q,tprl_q}; // temp pointer
 
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_acc, i_imk;
-wire i_rim, i_sim, i_dio, i_go6, i_mvi;
+wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_acc, i_imk, i_mmt;
+wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -240,12 +240,15 @@ assign i_tmp = //(i_aid & mem_d);
 assign i_dad = i_txa & lo001 & ireg_q[3];
 assign i_idx = i_txa & lo011; // increment/decrement pair
 assign i_nop = i_idx | (i_txa & hi000 & lo000); // nop
-assign i_mmx = (i_txa & lo010 & ~ireg_q[2]); // ldax,stax (4)
+assign i_mmx = (i_txa & lo010 & ~ireg_q[5]); // ldax,stax (4)
 assign i_acc = i_mmx;
 assign i_imk = i_rim | i_sim;
+assign i_mmt = (i_txa & lo010 & hi11x); // sta,lda (2)
 assign i_rim = (i_txa & hi100 & lo000);
 assign i_sim = (i_txa & hi110 & lo000);
 assign i_dio = i_sic & lo011 & hi01x;
+assign i_sta = (i_txa & lo010 & ~ireg_q[3] & ~(ireg_q[5]&~ireg_q[4])); // sta(x)
+assign i_lda = (i_txa & lo010 & ireg_q[3] & ~(ireg_q[5]&~ireg_q[4])); // lda(x)
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - INX (4) @ DCX (4)
 	(i_sic & lo111) | // 11xxx111 - RST n (8)
@@ -267,7 +270,7 @@ assign cyc_1 = // 148 instructions (5 unused)
 	(i_alu & ~mem_s); // all alu with no m (56)
 assign cyc_2 = // 42 instructions
 	(i_txa & lo110 & ~hi110) | // mvi with no m (7)
-	(i_txa & lo010 & ~ireg_q[2]) | // ldax,stax (4)
+	(i_txa & lo010 & ~ireg_q[5]) | // ldax,stax (4)
 	(i_sic & lo110 ) | // alu immediate (8)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s) | // all alu with m (8)
@@ -280,7 +283,7 @@ assign cycw2 =
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
-	(i_txa & lo010 & ~ireg_q[2]) | // ldax,stax (4)
+	(i_txa & lo010 & ~ireg_q[5]) | // ldax,stax (4)
 	(i_txa & hi110 & lo10x) | // inr,dcr m (2)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
 	(i_alu & mem_s); // all alu with m (8)
@@ -305,7 +308,7 @@ assign cycw3 = // sub:16-instructions
 assign cycd3 =
 	(i_txa & hi110 & ireg_q[2] & ~(ireg_q[1]&ireg_q[0])); // inr,dcr,mvi m (3)
 assign cyc_4 = // 2 instructions
-	(i_txa & lo010 & hi11x); // sta,lda (2)
+	(i_mmt); // sta,lda (2)
 assign cycw4 =
 	// cyc_5
 	(i_sic & lo010) | // cccc (8)
@@ -314,7 +317,8 @@ assign cycw4 =
 	(i_txa & lo010 & hi100) | // shld (1)
 	// cyc_4 - sub:1-instruction
 	(i_txa & lo010 & hi110); // sta (1)
-assign cycd4 = 1'b0;
+assign cycd4 =
+	(i_txa & lo010 & hi11x); // sta,lda (2)
 assign cyc_5 = // 12 instructions
 	// conditionals
 	(i_sic & lo010) | // cccc (8)
@@ -362,7 +366,7 @@ end
 // internal registers
 reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
 reg[STACTLSZ-1:0] stactl;
-reg isfirst, is_next, is_last;
+reg isfirst, is_next, is_last, is_nxta;
 reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 // control signals
 wire do_bimc, do_memr, do_memw, do_devr, do_devw;
@@ -393,6 +397,7 @@ always @(posedge clk_ or posedge rst) begin // asynchronous reset, active low
 				isfirst <= ~do_more[0];
 				is_next <= do_more[1];
 				is_last <= do_more[0] & ~do_more[1];
+				is_nxta <= do_more[2];
 				if (~do_more[0]) begin
 					// update stactl on first state
 					// stat:{io/m_,s1,s0} , ctrl:{inta_,wr_,rd_}
@@ -438,20 +443,6 @@ always @(posedge clk_ or posedge rst) begin // asynchronous reset, active low
 	end
 end
 
-// half-cycle logic
-reg q_ale, q_rwi;
-// create half cycles
-always @(posedge clk or posedge rst)
-begin
-	if (rst=== 1'b1) begin
-		q_ale <= 1'b1;
-		q_rwi <= 1'b0;
-	end else begin
-		q_ale <= ~is_next;
-		q_rwi <= cstate[3];
-	end
-end
-
 // output logic
 reg pin_ale, pin_ia_, pin_wr_, pin_rd_, pin_im_, pin_sta;
 // enable logic
@@ -466,13 +457,27 @@ assign chk_dat = enb_dat;
 assign chk_rgr = (((cstate[2]|cstate[3])&~isfirst&~stactl[CTRL_WR_])|
 	((cstate[4]|cstate[5]|cstate[6])&~cycgo[0]));
 assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
-	((cstate[4]|cstate[6])&~do_more[0]);
+	(((cstate[4]&~i_go6)|cstate[6])&~do_more[0]);
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
 assign chk_pcw = (cstate[2]&(isfirst|(~do_bimc&~do_data[0])));
 // where to do this???
 assign chk_ext = ((cstate[2]|cstate[3])&stactl[CTRL_WR_]);
 assign chk_mov = ((cstate[4]|cstate[6])&~cycgo[0]);
+
+// half-cycle logic
+reg q_ale, q_rwi;
+// create half cycles
+always @(posedge clk or posedge rst)
+begin
+	if (rst=== 1'b1) begin
+		q_ale <= 1'b1;
+		q_rwi <= 1'b0;
+	end else begin
+		q_ale <= ~pin_ale;
+		q_rwi <= cstate[3];
+	end
+end
 
 // drive output pins
 assign stat_s0 = pin_sta | stactl[STAT_S0];
@@ -684,11 +689,11 @@ wire usems, usemt;
 assign use_d = do_data[0];
 assign sel_p = is_next;
 assign usepc = ~use_d;
-assign usemm = ~i_mmx & use_d;
+assign usemm = ~i_mmx & use_d & ~i_mmt;
 assign usem0 = i_mmx & use_d & ~ireg_q[4];
 assign usem1 = i_mmx & use_d & ireg_q[4];
 assign usems = 1'b0; // no stack for now
-assign usemt = 1'b0; // not used for now
+assign usemt = i_mmt & use_d;
 zbuffer #(16) add0 (usepc,pcpc_q,busa_q);
 zbuffer #(16) add1 (usemm,rphl_q,busa_q);
 zbuffer #(16) add2 (usem0,rpbc_q,busa_q);
@@ -698,7 +703,7 @@ zbuffer #(16) add5 (usemt,tptr_q,busa_q);
 
 // register addressing
 wire[2:0] r1add, r2add, rpadd, rxadd;
-wire[7:0] addwr, addrd, addrx;
+wire[7:0] addwr, addrd, addrx, addrp;
 assign r1add = ireg_q[5:3];
 assign r2add = ireg_q[2:0];
 assign rpadd = ireg_q[5:4];
@@ -706,6 +711,7 @@ assign rxadd = {rpadd,sel_p};
 decoder r1dec (r1add,addwr);
 decoder r2dec (r2add,addrd);
 decoder rxdec (rxadd,addrx);
+decoder #(2) rpdec (rpadd,addrp);
 
 // register pair selector
 wire[15:0] rprp_q;
@@ -727,7 +733,12 @@ wire[7:0] accu_d;
 zbuffer acc0 (i_alu|i_ali,res8_q,accu_d);
 zbuffer acc1 (is_wr,busd_d,accu_d);
 zbuffer acc2 (i_rim,intr_q,accu_d);
-assign accu_w = (i_alu|i_ali|i_rim)|((i_mov|i_mvi|i_aid)&addwr[7]);
+zbuffer acc3 (i_lda,busd_d,accu_d);
+assign accu_w = (i_alu|i_ali|i_rim|i_lda)|((i_mov|i_mvi|i_aid)&addwr[7]);
+// acc drives data bus
+zbuffer bufa (i_sta,rgq[7],busd_q);
+assign intr_w = chk_rgw & i_sim;
+assign intr_d = rgq[7];
 
 // flag input select
 wire flag_w;
@@ -743,6 +754,8 @@ assign pcpc_d = idxp_q;
 assign ireg_w = chk_irw;
 assign ireg_d = busd_d;
 wire regh_w, regl_w;
+wire[7:0] rgu, rgv, rgt;
+wire[7:0] rgz[7:0],regh_d,regl_d;
 generate
 	for(i=0;i<8;i=i+1) begin
 		if(i==7) begin // accumulator
@@ -755,27 +768,47 @@ generate
 			assign rgr[i] = 1'b0; // only on push psw?
 		end else if(i==5) begin
 			assign regl_w = chk_rgw & ((is_wr & addwr[i])|(is_wx & addrx[i]));
-			assign rgw[i] = i_dad ? chk_rgw & sel_p : regl_w;
-			assign rgd[i] = i_dad ? res8_q : busd_d;
+			assign regl_d = i_dad ? res8_q : busd_d;
+			assign rgv[i] = i_dad ? chk_rgw & sel_p : regl_w;
+			assign rgu[i] = chk_rgw & i_idx & rgt[i];
+			assign rgw[i] = i_idx ? rgu[i] : rgv[i];
+			assign rgd[i] = i_idx ? rgz[i] : regl_d;
 			assign rgr[i] = chk_rgr & is_rr & addrd[i];
 		end else if(i==4) begin
 			assign regh_w = chk_rgw & ((is_wr & addwr[i])|(is_wx & addrx[i]));
-			assign rgw[i] = i_dad ? chk_rgw & ~sel_p : regh_w;
-			assign rgd[i] = i_dad ? res8_q : busd_d;
+			assign regh_d = i_dad ? res8_q : busd_d;
+			assign rgv[i] = i_dad ? chk_rgw & ~sel_p : regh_w;
+			assign rgu[i] = chk_rgw & i_idx & rgt[i];
+			assign rgw[i] = i_idx ? rgu[i] : rgv[i];
+			assign rgd[i] = i_idx ? rgz[i] : regh_d;
 			assign rgr[i] = chk_rgr & is_rr & addrd[i];
 		end else begin
-			assign rgw[i] = chk_rgw & ((is_wr & addwr[i])|(is_wx & addrx[i]));
-			assign rgd[i] = busd_d;
+			assign rgv[i] = chk_rgw & ((is_wr & addwr[i])|(is_wx & addrx[i]));
+			assign rgu[i] = chk_rgw & i_idx & rgt[i];
+			assign rgw[i] = i_idx ? rgu[i] : rgv[i];
+			assign rgd[i] = i_idx ? rgz[i] : busd_d;
 			assign rgr[i] = chk_rgr & is_rr & addrd[i];
 		end
 	end
+	for(i=0;i<4;i=i+1) begin
+		assign rgz[i*2] = idxp_q[15:8];
+		assign rgz[i*2+1] = idxp_q[7:0];
+		assign rgt[i*2] = addrp[i];
+		assign rgt[i*2+1] = addrp[i];
+	end
 endgenerate
 assign sprh_r = 1'b0;
-assign sprh_w = chk_rgw & is_wx & addrx[6];
-assign sprh_d = busd_d;
+assign sprh_w = chk_rgw & ((is_wx & addrx[6])|(i_idx & rgt[6]));
+assign sprh_d = i_idx ? rgz[6] : busd_d;
 assign sprl_r = 1'b0;
-assign sprl_w = chk_rgw & is_wx & addrx[7];
-assign sprl_d = busd_d;
+assign sprl_w = chk_rgw & ((is_wx & addrx[7])|(i_idx & rgt[7]));
+assign sprl_d = i_idx ? rgz[7] : busd_d;
+assign tprh_r = 1'b0;
+assign tprh_w = chk_rgw & i_mmt & ~is_nxta & ~is_last;
+assign tprh_d = busd_d;
+assign tprl_r = 1'b0;
+assign tprl_w = chk_rgw & i_mmt & is_nxta & ~is_last;
+assign tprl_d = busd_d;
 assign temp_r = chk_rgr & ((is_rr & addrd[6])|(i_aid & addwr[6] & is_last));
 assign temp_w = chk_rgw & is_wr & addwr[6];
 assign temp_d = i_aid ? idrg_q : busd_d;
