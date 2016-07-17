@@ -173,7 +173,7 @@ assign tptr_q = {tprh_q,tprl_q}; // temp pointer
 wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
 wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_acc, i_imk, i_mmt;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
-wire i_shl, i_lhl;
+wire i_shl, i_lhl, i_rot;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -253,6 +253,7 @@ assign i_sta = (i_txa & lo010 & ~ireg_q[3] & ~(ireg_q[5]&~ireg_q[4])); // sta(x)
 assign i_lda = (i_txa & lo010 & ireg_q[3] & ~(ireg_q[5]&~ireg_q[4])); // lda(x)
 assign i_shl = (i_txa & lo010 & hi100 ); // shld
 assign i_lhl = (i_txa & lo010 & hi101 ); // lhld
+assign i_rot = (i_txa & lo111 & ~ireg_q[5] ); // rotates acc {l,r}{,c} (4)
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - INX (4) @ DCX (4)
 	(i_sic & lo111) | // 11xxx111 - RST n (8)
@@ -734,13 +735,18 @@ assign is_rr = i_mov | i_mvi | i_alu | i_ali;
 assign is_wr = i_mov | i_mvi | i_aid;
 
 // acc input select
-wire accu_w;
-wire[7:0] accu_d;
+wire accu_w, rota_b;
+wire[7:0] accu_d, rotl_d, rotr_d, rota_d;
 zbuffer acc0 (i_alu|i_ali,res8_q,accu_d);
 zbuffer acc1 (is_wr,busd_d,accu_d);
 zbuffer acc2 (i_rim,intr_q,accu_d);
 zbuffer acc3 (i_lda,busd_d,accu_d);
-assign accu_w = (i_alu|i_ali|i_rim|i_lda)|(is_wr&addwr[7]);
+zbuffer acc4 (i_rot,rota_d,accu_d);
+assign accu_w = (i_alu|i_ali|i_rim|i_lda|i_rot)|(is_wr&addwr[7]);
+assign rota_d = ireg_q[3] ? rotr_d : rotl_d;
+assign rotr_d = ireg_q[4] ? {rgq[6][0],rgq[7][7:1]} : {rgq[7][0],rgq[7][7:1]};
+assign rotl_d = ireg_q[4] ? {rgq[7][6:0],rgq[6][0]} : {rgq[7][6:0],rgq[7][7]};
+assign rota_b = ireg_q[3] ? rgq[7][0] : rgq[7][7];
 // acc drives data bus
 zbuffer bufa (i_sta,rgq[7],busd_q);
 
@@ -784,11 +790,16 @@ assign intr_d = rgq[7];
 
 // flag input select
 wire flag_w;
-wire[7:0] flag_d, flag_1, flag_2;
-assign flag_w = (i_alu|i_ali|i_aid|i_dad); // on alu op & pop psw?
-assign flag_1 = i_aid ? idr_of&FLAGMASK : alu_of&FLAGMASK;
-assign flag_2 = ((alu_of&FLAGMSKC)|(rgq[6]&~FLAGMSKC));
-assign flag_d = i_dad ? flag_2 : flag_1;
+wire[7:0] flag_d, flag_0, flag_1, flag_2, flag_3;
+assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot); // on pop psw?
+assign flag_0 = (alu_of&FLAGMASK);
+assign flag_1 = (idr_of&FLAGMASK);
+assign flag_2 = (alu_of&FLAGMSKC)|(rgq[6]&~FLAGMSKC);
+assign flag_3 = ({7'b00,rota_b}&FLAGMSKC)|(rgq[6]&~FLAGMSKC);
+zbuffer flg0 (i_alu|i_ali,flag_0,flag_d);
+zbuffer flg1 (i_aid,flag_1,flag_d);
+zbuffer flg2 (i_dad,flag_2,flag_d);
+zbuffer flg3 (i_rot,flag_3,flag_d);
 
 // connecting the dots
 assign pcpc_w = chk_pci;
