@@ -171,9 +171,9 @@ assign tptr_q = {tprh_q,tprl_q}; // temp pointer
 
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_acc, i_imk, i_mmt;
+wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_imk, i_mmt;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
-wire i_shl, i_lhl, i_rot;
+wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
 wire tmp04, tmp05, tmp06;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
@@ -243,7 +243,6 @@ assign i_dad = i_txa & lo001 & ireg_q[3];
 assign i_idx = i_txa & lo011; // increment/decrement pair
 assign i_nop = i_idx | (i_txa & hi000 & lo000); // nop
 assign i_mmx = (i_txa & lo010 & ~ireg_q[5]); // ldax,stax (4)
-assign i_acc = i_mmx;
 assign i_imk = i_rim | i_sim;
 assign i_mmt = (i_txa & lo010 & ireg_q[5]); // sta,lda (2) shld, lhld (2)
 assign i_rim = (i_txa & hi100 & lo000);
@@ -251,9 +250,12 @@ assign i_sim = (i_txa & hi110 & lo000);
 assign i_dio = i_sic & lo011 & hi01x;
 assign i_sta = (i_txa & lo010 & ~ireg_q[3] & ~(ireg_q[5]&~ireg_q[4])); // sta(x)
 assign i_lda = (i_txa & lo010 & ireg_q[3] & ~(ireg_q[5]&~ireg_q[4])); // lda(x)
-assign i_shl = (i_txa & lo010 & hi100 ); // shld
-assign i_lhl = (i_txa & lo010 & hi101 ); // lhld
-assign i_rot = (i_txa & lo111 & ~ireg_q[5] ); // rotates acc {l,r}{,c} (4)
+assign i_shl = (i_txa & lo010 & hi100); // shld
+assign i_lhl = (i_txa & lo010 & hi101); // lhld
+assign i_rot = (i_txa & lo111 & ~ireg_q[5]); // rotates acc {l,r}{,c} (4)
+assign i_acc = (i_txa & lo111 & hi10x);
+assign i_daa = (i_txa & lo111 & hi100);
+assign i_flc = (i_txa & lo111 & hi11x);
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - INX (4) @ DCX (4)
 	(i_sic & lo111) | // 11xxx111 - RST n (8)
@@ -742,11 +744,17 @@ zbuffer acc1 (is_wr,busd_d,accu_d);
 zbuffer acc2 (i_rim,intr_q,accu_d);
 zbuffer acc3 (i_lda,busd_d,accu_d);
 zbuffer acc4 (i_rot,rota_d,accu_d);
-assign accu_w = (i_alu|i_ali|i_rim|i_lda|i_rot)|(is_wr&addwr[7]);
+assign accu_w = (i_alu|i_ali|i_rim|i_lda|i_rot|i_acc)|(is_wr&addwr[7]);
 assign rota_d = ireg_q[3] ? rotr_d : rotl_d;
 assign rotr_d = ireg_q[4] ? {rgq[6][0],rgq[7][7:1]} : {rgq[7][0],rgq[7][7:1]};
 assign rotl_d = ireg_q[4] ? {rgq[7][6:0],rgq[6][0]} : {rgq[7][6:0],rgq[7][7]};
 assign rota_b = ireg_q[3] ? rgq[7][0] : rgq[7][7];
+// acc special op
+wire[7:0] aspc_d, idaa_d, icma_d;
+assign aspc_d = ireg_q[3] ? icma_d : idaa_d;
+assign idaa_d = res8_q;
+assign icma_d = ~rgq[7];
+zbuffer acc5 (i_acc,aspc_d,accu_d);
 // acc drives data bus
 zbuffer bufa (i_sta,rgq[7],busd_q);
 
@@ -790,16 +798,18 @@ assign intr_d = rgq[7];
 
 // flag input select
 wire flag_w;
-wire[7:0] flag_d, flag_0, flag_1, flag_2, flag_3;
-assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot); // on pop psw?
+wire[7:0] flag_d, flag_0, flag_1, flag_2, flag_3, flag_4;
+assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot|i_daa|i_flc); // on pop psw?
 assign flag_0 = (alu_of&FLAGMASK);
 assign flag_1 = (idr_of&FLAGMASK);
-assign flag_2 = (alu_of&FLAGMSKC)|(rgq[6]&~FLAGMSKC);
-assign flag_3 = ({7'b00,rota_b}&FLAGMSKC)|(rgq[6]&~FLAGMSKC);
-zbuffer flg0 (i_alu|i_ali,flag_0,flag_d);
+assign flag_2 = {rgq[6][7:1],alu_of[0]};
+assign flag_3 = {rgq[6][7:1],rota_b};
+assign flag_4 = {rgq[6][7:1],(ireg_q[3]?~rgq[6][0]:1'b1)};
+zbuffer flg0 (i_alu|i_ali|i_daa,flag_0,flag_d);
 zbuffer flg1 (i_aid,flag_1,flag_d);
 zbuffer flg2 (i_dad,flag_2,flag_d);
 zbuffer flg3 (i_rot,flag_3,flag_d);
+zbuffer flg4 (i_flc,flag_4,flag_d);
 
 // connecting the dots
 assign pcpc_w = chk_pci;
@@ -859,23 +869,34 @@ generate
 	end
 endgenerate
 assign idr_op = ireg_q[0];
+// daa comparators
+wire daal_b, daah_b;
+assign daal_b = rgq[7][3]&(rgq[7][2]|rgq[7][1])|rgq[6][4];
+assign daah_b = rgq[7][7]&(rgq[7][6]|rgq[7][5])|rgq[6][0];
+wire[7:0] daad_d;
+assign daad_d[3:0] = daal_b ? 4'b0110 : 4'b0000;
+assign daad_d[7:4] = daah_b ? 4'b0110 : 4'b0000;
+wire e_bus;
+assign e_bus = ~i_dad & ~i_acc;
+zbuffer op2x (i_acc,daad_d,opr2_d);
+// alu inputs
 wire[7:0] oprx_d;
 assign oprx_d = sel_p ? rgq[5] : rgq[4];
 assign opr1_d = i_dad ? oprx_d : rgq[7];
 generate
 	for(i=0;i<8;i=i+1) begin
 		if(i==6) begin // memory: from bus?
-			zbuffer op2s (~i_dad&addrd[i],busd_d,opr2_d);
+			zbuffer op2s (e_bus&addrd[i],busd_d,opr2_d);
 			zbuffer op2x (i_dad&addrx[i],sprh_q,opr2_d);
 		end else if(i==7) begin
-			zbuffer op2s (~i_dad&addrd[i],rgq[i],opr2_d);
+			zbuffer op2s (e_bus&addrd[i],rgq[i],opr2_d);
 			zbuffer op2x (i_dad&addrx[i],sprl_q,opr2_d);
 		end else begin
-			zbuffer op2s (~i_dad&addrd[i],rgq[i],opr2_d);
+			zbuffer op2s (e_bus&addrd[i],rgq[i],opr2_d);
 			zbuffer op2x (i_dad&addrx[i],rgq[i],opr2_d);
 		end
 	end
 endgenerate
-assign alu_op = i_dad ? {2'b000,~sel_p} : ireg_q[5:3];
+assign alu_op = i_dad ? {2'b00,~sel_p} : (i_acc ? 3'b000 : ireg_q[5:3]);
 
 endmodule

@@ -70,8 +70,8 @@ always @(negedge clk) begin
 	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_irw, dut.chk_pcw);
 	//$strobe("[%05g] {rgr:%b}{rgw:%b}{accu_d:%b}{accu_w:%b}\n",
 	//	$time,dut.rgr, dut.rgw, dut.accu_d, dut.accu_w);
-	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}\n",
-	//	$time,dut.rgr, dut.rgw, dut.opr1_d, dut.opr2_d);
+	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}{res8_q:%b}\n",
+	//	$time,dut.rgr, dut.rgw, dut.opr1_d, dut.opr2_d, dut.res8_q);
 	//$strobe("[%05g] {upc:%b}{umm:%b}{um0:%b}{um1:%b}{ums:%b}{umt:%b}\n",
 	//	$time,dut.usepc,dut.usemm,dut.usem0,dut.usem1,dut.usems,dut.usemt);
 end

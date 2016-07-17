@@ -14,14 +14,14 @@ Completion Progress:
   = {{mov reg,reg},{mov m,reg},{mov reg,m},{hlt}} (64)
 - Instructions (10xxxxxx) all completed
   = {{<alu> reg},{<alu> m}} (64)
-- Instructions (00xxxxxx) in progress
+- Instructions (00xxxxxx) all completed
   = {{mvi reg,data},{mvi m,data}} completed (8)
   = {{inr reg},{inr m},{dcr reg},{dcr m}} completed (16)
   = {{lxi rp,dat16},{dad rp}} completed (8)
   = {{inx rp},{dcx rp}} completed (8)
   = {{00xxx000}nop+unused+rim+sim} completed (8)
   = {{stax rp},{ldax rp},{sta},{lda},{shld},{lhld}} completed (8)
-  = {{rlc},{rrc},{ral},{rar}} completed (4)
+  = {{rlc},{rrc},{ral},{rar},{daa},{cma},{cmc},{stc}} completed (8)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
 
