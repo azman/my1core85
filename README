@@ -20,7 +20,7 @@ Completion Progress:
   = {{lxi rp,dat16},{dad rp}} completed (8)
   = {{inx rp},{dcx rp}} completed (8)
   = {{00xxx000}nop+unused+rim+sim} completed (8)
-  = {{stax rp},{ldax rp}} completed (4)
+  = {{stax rp},{ldax rp},{sta},{lda},{shld},{lhld}} completed (8)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
 

@@ -31,26 +31,22 @@ always @(dut.rgq or dut.temp_q or dut.intr_q or dut.sptr_q or dut.tptr_q) begin
 	$write("[H:%h] [L:%h] ", dut.rgq[4], dut.rgq[5]);
 	$write("[F:%h] [A:%h]\n", dut.rgq[6], dut.rgq[7]);
 	$write("[%05g] REGS: ", $time);
-	$write("[T:%h] [I:%h] ", dut.temp_q, dut.intr_q);
+	$write("[I:%h] [T:%h] [M:%h] ", dut.ireg_q, dut.temp_q, dut.intr_q);
 	$write("[PC:%h] [SP:%h] [TP:%h]\n", dut.pcpc_q, dut.sptr_q, dut.tptr_q);
 end
 
 // detect new state (alternative to using monitor)
-always @(dut.cstate) begin
+//always @(dut.cstate) begin
 //	$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
 //		dut.cstate, dut.stactl,addr,addrdata,dut.busd_d,dut.busd_q);
-end
+//end
 
 // detect new instruction
 always @(dut.ireg_q) begin
 	$write("[%05g] CODE: [I:%h] ", $time, dut.ireg_q);
 	deassemble(dut.ireg_q);
-end
-
-// more than 1 cycle?
-always @(dut.cycgo) begin
-	if(dut.cycgo!=={4{1'b0}}) begin
-		$write("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
+	if(dut.cycgo!=={4{1'b0}}) begin // more than 1 cycle?
+		$strobe("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
 			dut.cycrw, dut.cyccd);
 	end
 end
@@ -64,7 +60,7 @@ end
 
 // fail-safe stop condition
 always begin
-	#2200 $finish;
+	#3000 $finish;
 end
 
 always @(negedge clk) begin
