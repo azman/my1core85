@@ -19,11 +19,13 @@ Completion Progress:
   = {{inr reg},{inr m},{dcr reg},{dcr m}} completed (16)
   = {{lxi rp,dat16},{dad rp}} completed (8)
   = {{inx rp},{dcx rp}} completed (8)
-  = {{00xxx000}nop+unused+rim+sim} completed (8)
+  = {(00xxx000){nop}{unused(5)}{rim}{sim} completed (8)
   = {{stax rp},{ldax rp},{sta},{lda},{shld},{lhld}} completed (8)
   = {{rlc},{rrc},{ral},{rar},{daa},{cma},{cmc},{stc}} completed (8)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
+  = {(11xx0001){pop rp}} completed (4) {ret,unused,pchl,sphl}??
+  = {(11xx0101){push rp}} completed (4) {call,unused(3)}??
 
 Note:
 

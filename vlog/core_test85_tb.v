@@ -36,17 +36,21 @@ always @(dut.rgq or dut.temp_q or dut.intr_q or dut.sptr_q or dut.tptr_q) begin
 end
 
 // detect new state (alternative to using monitor)
-//always @(dut.cstate) begin
+always @(dut.cstate) begin
 //	$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
 //		dut.cstate, dut.stactl,addr,addrdata,dut.busd_d,dut.busd_q);
-//end
+end
 
 // detect new instruction
 always @(dut.ireg_q) begin
 	$write("[%05g] CODE: [I:%h] ", $time, dut.ireg_q);
 	deassemble(dut.ireg_q);
-	if(dut.cycgo!=={4{1'b0}}) begin // more than 1 cycle?
-		$strobe("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
+end
+
+// detect instruction with more than 1 cycle
+always @(dut.cycgo) begin
+	if(dut.cycgo!=={4{1'b0}}) begin
+		$write("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
 			dut.cycrw, dut.cyccd);
 	end
 end
@@ -60,7 +64,7 @@ end
 
 // fail-safe stop condition
 always begin
-	#3000 $finish;
+	#3500 $finish;
 end
 
 always @(negedge clk) begin
@@ -68,6 +72,8 @@ always @(negedge clk) begin
 	//	$time,dut.chk_adh, dut.chk_adl, dut.chk_dat);
 	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{chk_irw:%b}{chk_pcw:%b}\n",
 	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_irw, dut.chk_pcw);
+	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{chk_pci:%b}{chk_tpi:%b}\n",
+	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_pci, dut.chk_tpi);
 	//$strobe("[%05g] {rgr:%b}{rgw:%b}{accu_d:%b}{accu_w:%b}\n",
 	//	$time,dut.rgr, dut.rgw, dut.accu_d, dut.accu_w);
 	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}{res8_q:%b}\n",

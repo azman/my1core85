@@ -171,10 +171,10 @@ assign tptr_q = {tprh_q,tprl_q}; // temp pointer
 
 // for instruction decoding
 wire i_txa, i_mov, i_alu, i_sic, i_hlt, i_aid, i_ali, i_lxi;
-wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_imk, i_mmt;
+wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_imk, i_mmt, i_mms;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
-wire tmp04, tmp05, tmp06;
+wire i_pop, i_psh;
 wire lo000, lo001, lo010, lo011, lo101, lo110, lo111;
 wire lo10x, lox00, lox01, lox11;
 wire hi000, hi001, hi010, hi011, hi100, hi101, hi110, hi111;
@@ -192,10 +192,6 @@ assign i_txa = ~ireg_q[7] & ~ireg_q[6]; // 00 - transfer + arithmetic
 assign i_mov = ~ireg_q[7] & ireg_q[6]; // 01 - register move + halt
 assign i_alu = ireg_q[7] & ~ireg_q[6]; // 10 - basic alu (ad,as,&,|,^,cmp)
 assign i_sic = ireg_q[7] & ireg_q[6]; // 11 - stack, i/o & control
-// 'helper' signals :p
-assign tmp04 = ~ireg_q[3] & ireg_q[2];
-assign tmp05 = ireg_q[3] & ~ireg_q[2];
-assign tmp06 = ireg_q[3] & ireg_q[2];
 // mid 3-bits
 assign hi000 = ~ireg_q[5] & ~ireg_q[4] & ~ireg_q[3];
 assign hi001 = ~ireg_q[5] & ~ireg_q[4] & ireg_q[3];
@@ -256,15 +252,16 @@ assign i_rot = (i_txa & lo111 & ~ireg_q[5]); // rotates acc {l,r}{,c} (4)
 assign i_acc = (i_txa & lo111 & hi10x);
 assign i_daa = (i_txa & lo111 & hi100);
 assign i_flc = (i_txa & lo111 & hi11x);
+assign i_mms = (i_sic & lox01 & ~ireg_q[3]); // pop (4), push (4)
+assign i_pop = i_mms & ~ireg_q[2];
+assign i_psh = i_mms & ireg_q[2];
 assign i_go6 =
-	(i_txa & lo011) | // 00xxx011 - INX (4) @ DCX (4)
-	(i_sic & lo111) | // 11xxx111 - RST n (8)
-	//(i_sic & lo000) | // 11xxx000 - Rccc (8)
-	//(i_sic & lo100) | // 11xxx100 - Cccc (8)
-	(i_sic & lox00) |
-	(i_sic & tmp04 & lox01) | // 11xx0101 - push (4)
-	(i_sic & ireg_q[5] & tmp05 & lox01) | // 111x1001 - pchl, sphl (2)
-	(i_sic & hi00x & tmp06 & lox01); // 11001101 - call (1)
+	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
+	(i_sic & lo111) | // 11xxx111 - rst n (8)
+	(i_sic & lox00) | // Rccc, Cccc (16)
+	(i_sic & ~ireg_q[3] & lo101) | // 11xx0101 - push (4)
+	(i_sic & ireg_q[5] & ireg_q[3] & lo001) | // 111x1001 - pchl, sphl (2)
+	(i_sic & hi001 & lo101); // 11001101 - call (1)
 // assign extra cycles if needed - cyc_1 NOT needed?!
 assign cyc_1 = // 148 instructions (5 unused)
 	(i_txa & ~hi110 & lo10x) | // inc & dcr (14)
@@ -278,18 +275,20 @@ assign cyc_1 = // 148 instructions (5 unused)
 assign cyc_2 = // 42 instructions
 	(i_txa & lo110 & ~hi110) | // mvi with no m (7)
 	(i_txa & lo010 & ~ireg_q[5]) | // ldax,stax (4)
-	(i_sic & lo110 ) | // alu immediate (8)
-	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
-	(i_alu & mem_s) | // all alu with m (8)
-	i_hlt ; // (1)
+	(i_sic & lo110) | // alu immediate (8)
+	(i_mov & (mem_d | mem_s)) | // all mov with m incl. hlt (14+1)
+	(i_alu & mem_s); // all alu with m (8)
 assign cycw2 =
 	// cyc_3
 	(i_sic & lo111) | // rst (8)
 	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
-	// cyc_2 - sub:9-instructions
+	// cyc_2
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
+	// cyc_3
+	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
+	// cyc_2
 	(i_txa & lo010 & ~ireg_q[5]) | // ldax,stax (4)
 	(i_txa & hi110 & lo10x) | // inr,dcr m (2)
 	(i_mov & (mem_d ^ mem_s)) | // all mov with m except hlt (14)
@@ -300,8 +299,7 @@ assign cyc_3 = // 47 instructions
 	(i_sic & lo010 ) | // jccc (8) - or two
 	// always
 	(i_sic & lo111) | // rst (8)
-	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
-	(i_sic & lo001 & ~ireg_q[3]) | // pop (4)
+	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
 	(i_sic & lo011 & hi000 ) | // jmp (1)
 	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_txa & lo001) | // dad, lxi (8)
@@ -313,6 +311,7 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
 assign cycd3 =
+	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
 	(i_txa & hi110 & ireg_q[2] & ~(ireg_q[1]&ireg_q[0])); // inr,dcr,mvi m (3)
 assign cyc_4 = // 2 instructions
 	(i_txa & lo010 & hi11x); // sta,lda (2)
@@ -433,21 +432,9 @@ always @(posedge clk_ or posedge rst) begin // asynchronous reset, active low
 			end
 			STATE_T4: begin
 				// assign next machine cycle here
-				if (~i_go6) begin
-					if (cycgo[0]) begin
-						do_more <= cycgo;
-						dowrite <= cycrw;
-						do_data <= cyccd;
-					end
-				end
-			end
-			STATE_T6: begin
-				// assign next machine cycle here
-				if (cycgo[0]) begin
-					do_more <= cycgo;
-					dowrite <= cycrw;
-					do_data <= cyccd;
-				end
+				do_more <= cycgo;
+				dowrite <= cycrw;
+				do_data <= cyccd;
 			end
 		endcase
 	end
@@ -471,7 +458,8 @@ assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
 assign chk_pci = (cstate[2]&(isfirst|(~do_bimc&~do_data[0])));
-assign chk_tpi = (cstate[2]&~do_bimc&do_data[0]&do_data[1]);
+assign chk_tpi = (cstate[2]&~do_bimc&do_data[0]&(do_data[1]|~i_go6))|
+	(cstate[5]&~do_bimc&do_data[0]);
 // where to do this???
 assign chk_ext = ((cstate[2]|cstate[3])&stactl[CTRL_WR_]);
 assign chk_mov = ((cstate[4]|cstate[6])&~cycgo[0]);
@@ -700,10 +688,10 @@ wire usems, usemt;
 assign use_d = do_data[0];
 assign sel_p = is_next;
 assign usepc = ~use_d;
-assign usemm = ~i_mmx & use_d & ~i_mmt;
+assign usemm = ~i_mmx & use_d & ~i_mmt & ~i_mms;
 assign usem0 = i_mmx & use_d & ~ireg_q[4];
 assign usem1 = i_mmx & use_d & ireg_q[4];
-assign usems = 1'b0; // no stack for now
+assign usems = i_mms & use_d;
 assign usemt = i_mmt & use_d;
 zbuffer #(16) add0 (usepc,pcpc_q,busa_q);
 zbuffer #(16) add1 (usemm,rphl_q,busa_q);
@@ -718,7 +706,7 @@ wire[7:0] addwr, addrd, addrx, addrp;
 assign r1add = ireg_q[5:3];
 assign r2add = ireg_q[2:0];
 assign rpadd = ireg_q[5:4];
-assign rxadd = {rpadd,sel_p};
+assign rxadd = {rpadd,i_pop?~sel_p:sel_p};
 decoder r1dec (r1add,addwr);
 decoder r2dec (r2add,addrd);
 decoder rxdec (rxadd,addrx);
@@ -744,7 +732,8 @@ zbuffer acc1 (is_wr,busd_d,accu_d);
 zbuffer acc2 (i_rim,intr_q,accu_d);
 zbuffer acc3 (i_lda,busd_d,accu_d);
 zbuffer acc4 (i_rot,rota_d,accu_d);
-assign accu_w = (i_alu|i_ali|i_rim|i_lda|i_rot|i_acc)|(is_wr&addwr[7]);
+assign accu_w = (i_alu|i_ali|i_rim|i_lda|i_rot|i_acc)|
+	(is_wr&addwr[7])|(i_pop&addrx[7]);
 assign rota_d = ireg_q[3] ? rotr_d : rotl_d;
 assign rotr_d = ireg_q[4] ? {rgq[6][0],rgq[7][7:1]} : {rgq[7][0],rgq[7][7:1]};
 assign rotl_d = ireg_q[4] ? {rgq[7][6:0],rgq[6][0]} : {rgq[7][6:0],rgq[7][7]};
@@ -755,12 +744,15 @@ assign aspc_d = ireg_q[3] ? icma_d : idaa_d;
 assign idaa_d = res8_q;
 assign icma_d = ~rgq[7];
 zbuffer acc5 (i_acc,aspc_d,accu_d);
+zbuffer acc6 (i_pop,busd_d,accu_d);
 // acc drives data bus
 zbuffer bufa (i_sta,rgq[7],busd_q);
 
 // input for inx/dcx op
-assign idx_op = chk_pci|chk_tpi ? 1'b0 : ireg_q[3];
-assign idxp_d = chk_pci|chk_tpi ? (chk_pci?pcpc_q:tptr_q) : rprp_q;
+wire[15:0] pptr_q;
+assign pptr_q = i_mms ? sptr_q : tptr_q;
+assign idx_op = chk_pci|chk_tpi ? (chk_pci?1'b0:ireg_q[2]) : ireg_q[3];
+assign idxp_d = chk_pci|chk_tpi ? (chk_pci?pcpc_q:pptr_q) : rprp_q;
 // inx/dcx op to reg
 wire[7:0] addrz;
 wire[7:0] rgz[7:0];
@@ -775,19 +767,19 @@ endgenerate
 
 // hl input select
 wire is_wx;
-assign is_wx = is_wr | i_lxi | i_lhl;
+assign is_wx = is_wr | i_lxi | i_lhl | i_pop;
 wire regh_w, regl_w;
 wire[7:0] regh_d,regl_d;
 zbuffer rgh0 (i_dad,res8_q,regh_d);
 zbuffer rgh1 (is_wx,busd_d,regh_d);
 zbuffer rgh2 (i_idx,rgz[4],regh_d);
 assign regh_w = ((i_dad|i_lhl)&~sel_p)|(is_wr&addwr[4])|
-	(i_lxi&addrx[4])|(i_idx&addrz[4]);
+	(i_lxi&addrx[4])|(i_idx&addrz[4])|(i_pop&addrx[4]);
 zbuffer rgl0 (i_dad,res8_q,regl_d);
 zbuffer rgl1 (is_wx,busd_d,regl_d);
 zbuffer rgl2 (i_idx,rgz[5],regl_d);
 assign regl_w = ((i_dad|i_lhl)&sel_p)|(is_wr&addwr[5])|
-	(i_lxi&addrx[5])|(i_idx&addrz[5]);
+	(i_lxi&addrx[5])|(i_idx&addrz[5])|(i_pop&addrx[5]);
 // hl drives data bus
 zbuffer bufh (i_shl&is_last,rgq[4],busd_q);
 zbuffer bufl (i_shl&~is_last,rgq[5],busd_q);
@@ -799,7 +791,8 @@ assign intr_d = rgq[7];
 // flag input select
 wire flag_w;
 wire[7:0] flag_d, flag_0, flag_1, flag_2, flag_3, flag_4;
-assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot|i_daa|i_flc); // on pop psw?
+assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot|i_daa|i_flc)|
+	(i_pop&addrx[6]);
 assign flag_0 = (alu_of&FLAGMASK);
 assign flag_1 = (idr_of&FLAGMASK);
 assign flag_2 = {rgq[6][7:1],alu_of[0]};
@@ -810,6 +803,7 @@ zbuffer flg1 (i_aid,flag_1,flag_d);
 zbuffer flg2 (i_dad,flag_2,flag_d);
 zbuffer flg3 (i_rot,flag_3,flag_d);
 zbuffer flg4 (i_flc,flag_4,flag_d);
+zbuffer flg5 (i_pop,busd_d,flag_d);
 
 // connecting the dots
 assign pcpc_w = chk_pci;
@@ -821,38 +815,39 @@ generate
 		if(i==7) begin // accumulator
 			assign rgw[i] = chk_rgw & accu_w;
 			assign rgd[i] = accu_d;
-			assign rgr[i] = chk_rgr & is_rr & addrd[i];
+			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
 		end else if(i==6) begin // flag
 			assign rgw[i] = chk_rgw & flag_w;
 			assign rgd[i] = flag_d;
-			assign rgr[i] = 1'b0; // only on push psw?
+			assign rgr[i] = chk_rgr & (i_psh&addrx[i]); // only on push psw?
 		end else if(i==5) begin
 			assign rgw[i] = chk_rgw & regl_w;
 			assign rgd[i] = regl_d;
-			assign rgr[i] = chk_rgr & is_rr & addrd[i];
+			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
 		end else if(i==4) begin
 			assign rgw[i] = chk_rgw & regh_w;
 			assign rgd[i] = regh_d;
-			assign rgr[i] = chk_rgr & is_rr & addrd[i];
+			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
 		end else begin
 			assign rgw[i] = chk_rgw &
-				((is_wr&addwr[i])|(i_lxi&addrx[i])|(i_idx&addrz[i]));
+				((is_wr&addwr[i])|(i_lxi&addrx[i])|
+				(i_idx&addrz[i])|(i_pop&addrx[i]));
 			assign rgd[i] = i_idx ? rgz[i] : busd_d;
-			assign rgr[i] = chk_rgr & is_rr & addrd[i];
+			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
 		end
 	end
 endgenerate
 assign sprh_r = 1'b0;
-assign sprh_w = chk_rgw & ((i_lxi&addrx[6])|(i_idx&addrz[6]));
-assign sprh_d = i_idx ? rgz[6] : busd_d;
+assign sprh_w = (chk_rgw&((i_lxi&addrx[6])|(i_idx&addrz[6])))|(chk_tpi&i_mms);
+assign sprh_d = i_idx ? rgz[6] : (i_mms?idxp_q[15:8]:busd_d);
 assign sprl_r = 1'b0;
-assign sprl_w = chk_rgw & ((i_lxi&addrx[7])|(i_idx&addrz[7]));
-assign sprl_d = i_idx ? rgz[7] : busd_d;
+assign sprl_w = (chk_rgw&((i_lxi&addrx[7])|(i_idx&addrz[7])))|(chk_tpi&i_mms);
+assign sprl_d = i_idx ? rgz[7] : (i_mms?idxp_q[7:0]:busd_d);
 assign tprh_r = 1'b0;
-assign tprh_w = (chk_rgw & i_mmt & ~is_nxta&~is_data) | chk_tpi;
+assign tprh_w = (chk_rgw & i_mmt & ~is_nxta&~is_data) | (chk_tpi&i_mmt);
 assign tprh_d = chk_tpi ? idxp_q[15:8] : busd_d;
 assign tprl_r = 1'b0;
-assign tprl_w = (chk_rgw & i_mmt & is_nxta&~is_data) | chk_tpi;
+assign tprl_w = (chk_rgw & i_mmt & is_nxta&~is_data) | (chk_tpi&i_mmt);
 assign tprl_d = chk_tpi ? idxp_q[7:0] : busd_d;
 assign temp_r = chk_rgr & ((is_rr & addrd[6])|(i_aid & addwr[6] & is_last));
 assign temp_w = chk_rgw & is_wr & addwr[6];
