@@ -14,8 +14,6 @@ initial begin
 	intr =  1'b0; trap =  1'b0; // no interrupts for now
 	rst75 =  1'b0; rst65 =  1'b0; rst55 =  1'b0;
 	#(CLKPTIME*3) rst = 1'b0; // 3-clock cycle reset
-	//$monitor("[%05g] STATE: %b {%b}[%h][%h]",$time,
-	//	dut.cstate, dut.stactl,addr,addrdata);
 end
 
 // generate clock
@@ -45,14 +43,8 @@ end
 always @(dut.ireg_q) begin
 	$write("[%05g] CODE: [I:%h] ", $time, dut.ireg_q);
 	deassemble(dut.ireg_q);
-end
-
-// detect instruction with more than 1 cycle
-always @(dut.cycgo) begin
-	if(dut.cycgo!=={4{1'b0}}) begin
-		$write("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
-			dut.cycrw, dut.cyccd);
-	end
+	$strobe("[EXTRA] [M:%b][W:%b][D:%b]\n", dut.cycgo,
+		dut.cycrw, dut.cyccd);
 end
 
 // detect stop condition

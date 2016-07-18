@@ -246,7 +246,7 @@ wire i_hlt, i_aid, i_ali, i_lxi;
 wire i_tmp, i_dad, i_idx, i_nop, i_mmx, i_imk, i_mmt, i_mms;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
-wire i_pop, i_psh;
+wire i_pop, i_psh, i_jmp, i_jcc;
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -274,6 +274,8 @@ assign i_flc = (i_txa & lo111 & hi11x);
 assign i_mms = (i_sic & lox01 & ~ireg_q[3]); // pop (4), push (4)
 assign i_pop = i_mms & ~ireg_q[2];
 assign i_psh = i_mms & ireg_q[2];
+assign i_jmp = (i_sic & lo011 & hi000);
+assign i_jcc = (i_sic & lo010); // do i need this???
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -870,8 +872,8 @@ generate
 endgenerate
 
 // program counter select
-assign pcpc_w = chk_pci;
-assign pcpc_d = idxp_q;
+assign pcpc_w = chk_pci | (chk_rgw&i_jmp&is_last);
+assign pcpc_d = chk_pci ? idxp_q : {busd_d,temp_q};
 
 // instruction register select
 assign ireg_w = chk_irw;
@@ -887,15 +889,15 @@ assign sprl_d = i_idx ? rgz[7] : (i_mms?idxp_q[7:0]:busd_d);
 
 // temporary pointer select
 assign tprh_r = 1'b0;
-assign tprh_w = (chk_rgw & i_mmt & ~is_nxta&~is_data) | (chk_tpi&i_mmt);
+assign tprh_w = (chk_rgw&i_mmt&~is_nxta&~is_data)|(chk_tpi&i_mmt);
 assign tprh_d = chk_tpi ? idxp_q[15:8] : busd_d;
 assign tprl_r = 1'b0;
-assign tprl_w = (chk_rgw & i_mmt & is_nxta&~is_data) | (chk_tpi&i_mmt);
+assign tprl_w = (chk_rgw&i_mmt&is_nxta&~is_data)|(chk_tpi&i_mmt);
 assign tprl_d = chk_tpi ? idxp_q[7:0] : busd_d;
 
 // temp register select
-assign temp_r = chk_rgr & ((is_rr & addrd[6])|(i_aid & addwr[6] & is_last));
-assign temp_w = chk_rgw & is_wr & addwr[6];
+assign temp_r = chk_rgr & ((is_rr&addrd[6])|(i_aid&addwr[6]&is_last));
+assign temp_w = chk_rgw & ((is_wr & addwr[6])|(i_jmp&~is_last));
 assign temp_d = i_aid ? idrg_q : busd_d;
 
 // increment/decrement for 8-bit registers
