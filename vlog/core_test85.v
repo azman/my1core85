@@ -181,6 +181,14 @@ wire[7:0] idx_of;
 wire idx_op;
 incdec #(16) id16 (idx_op,idxp_d,idxp_q,idx_of);
 
+// daa comparators
+wire daal_b, daah_b;
+assign daal_b = rgq[7][3]&(rgq[7][2]|rgq[7][1])|rgq[6][4];
+assign daah_b = rgq[7][7]&(rgq[7][6]|rgq[7][5])|rgq[6][0];
+wire[7:0] daad_d;
+assign daad_d[3:0] = daal_b ? 4'b0110 : 4'b0000;
+assign daad_d[7:4] = daah_b ? 4'b0110 : 4'b0000;
+
 //------------------------------------------------------------------------------
 // INSTRUCTION DECODING LOGIC BLOCK
 //------------------------------------------------------------------------------
@@ -740,32 +748,38 @@ zbuffer #(16) rps1 (addrx[2]|addrx[3],rpde_q,rprp_q);
 zbuffer #(16) rps2 (addrx[4]|addrx[5],rphl_q,rprp_q);
 zbuffer #(16) rps3 (addrx[6]|addrx[7],sptr_q,rprp_q);
 
-// general address selector
-wire is_rr, is_wr;
-assign is_rr = i_mov | i_mvi | i_alu | i_ali;
-assign is_wr = i_mov | i_mvi | i_aid;
+// register selector
+wire is_rr, is_wr, isalu;
+assign isalu = i_alu | i_ali;
+assign is_rr = i_mov | i_mvi | isalu; // using src (addrd) - bus_q
+assign is_wr = i_mov | i_mvi | i_aid; // using dst (addwr) - bus_d
 
-// acc input select
-wire accu_w, rota_b;
-wire[7:0] accu_d, rotl_d, rotr_d, rota_d;
-zbuffer acc0 (i_alu|i_ali,res8_q,accu_d);
-zbuffer acc1 (is_wr,busd_d,accu_d);
-zbuffer acc2 (i_rim,intr_q,accu_d);
-zbuffer acc3 (i_lda,busd_d,accu_d);
-zbuffer acc4 (i_rot,rota_d,accu_d);
-assign accu_w = (i_alu|i_ali|i_rim|i_lda|i_rot|i_acc)|
-	(is_wr&addwr[7])|(i_pop&addrx[7]);
-assign rota_d = ireg_q[3] ? rotr_d : rotl_d;
-assign rotr_d = ireg_q[4] ? {rgq[6][0],rgq[7][7:1]} : {rgq[7][0],rgq[7][7:1]};
+// acc rotate signals
+wire[7:0] rotl_d, rotr_d, rota_d;
+wire rota_b; // for carry flag input
 assign rotl_d = ireg_q[4] ? {rgq[7][6:0],rgq[6][0]} : {rgq[7][6:0],rgq[7][7]};
+assign rotr_d = ireg_q[4] ? {rgq[6][0],rgq[7][7:1]} : {rgq[7][0],rgq[7][7:1]};
+assign rota_d = ireg_q[3] ? rotr_d : rotl_d;
 assign rota_b = ireg_q[3] ? rgq[7][0] : rgq[7][7];
-// acc special op
+
+// acc special op - daa,cma
 wire[7:0] aspc_d, idaa_d, icma_d;
 assign aspc_d = ireg_q[3] ? icma_d : idaa_d;
 assign idaa_d = res8_q;
 assign icma_d = ~rgq[7];
+
+// acc input select
+wire accu_w, go_acc;
+wire[7:0] accu_d;
+zbuffer acc0 (isalu,res8_q,accu_d);
+zbuffer acc1 (is_wr,busd_d,accu_d);
+zbuffer acc2 (i_rim,intr_q,accu_d);
+zbuffer acc3 (i_lda,busd_d,accu_d);
+zbuffer acc4 (i_rot,rota_d,accu_d);
 zbuffer acc5 (i_acc,aspc_d,accu_d);
 zbuffer acc6 (i_pop,busd_d,accu_d);
+assign go_acc = isalu|i_rim|i_lda|i_rot|i_acc;
+assign accu_w = go_acc|(is_wr&addwr[7])|(i_pop&addrx[7]);
 // acc drives data bus
 zbuffer bufa (i_sta,rgq[7],busd_q);
 
@@ -807,13 +821,13 @@ zbuffer bufl (i_shl&~is_last,rgq[5],busd_q);
 
 // interrupt mask register
 assign intr_w = chk_rgw & i_sim;
-assign intr_d = rgq[7];
+assign intr_d = rgq[7]; // should mask this???
+assign intr_r = 1'b0;
 
 // flag input select
 wire flag_w;
 wire[7:0] flag_d, flag_0, flag_1, flag_2, flag_3, flag_4;
-assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot|i_daa|i_flc)|
-	(i_pop&addrx[6]);
+assign flag_w = (i_alu|i_ali|i_aid|i_dad|i_rot|i_daa|i_flc)|(i_pop&addrx[6]);
 assign flag_0 = (alu_of&FLAGMASK);
 assign flag_1 = (idr_of&FLAGMASK);
 assign flag_2 = {rgq[6][7:1],alu_of[0]};
@@ -826,11 +840,7 @@ zbuffer flg3 (i_rot,flag_3,flag_d);
 zbuffer flg4 (i_flc,flag_4,flag_d);
 zbuffer flg5 (i_pop,busd_d,flag_d);
 
-// connecting the dots
-assign pcpc_w = chk_pci;
-assign pcpc_d = idxp_q;
-assign ireg_w = chk_irw;
-assign ireg_d = busd_d;
+// main register select - the actual signal :p
 generate
 	for(i=0;i<8;i=i+1) begin
 		if(i==7) begin // accumulator
@@ -858,22 +868,37 @@ generate
 		end
 	end
 endgenerate
+
+// program counter select
+assign pcpc_w = chk_pci;
+assign pcpc_d = idxp_q;
+
+// instruction register select
+assign ireg_w = chk_irw;
+assign ireg_d = busd_d;
+
+// stack pointer select
 assign sprh_r = 1'b0;
 assign sprh_w = (chk_rgw&((i_lxi&addrx[6])|(i_idx&addrz[6])))|(chk_tpi&i_mms);
 assign sprh_d = i_idx ? rgz[6] : (i_mms?idxp_q[15:8]:busd_d);
 assign sprl_r = 1'b0;
 assign sprl_w = (chk_rgw&((i_lxi&addrx[7])|(i_idx&addrz[7])))|(chk_tpi&i_mms);
 assign sprl_d = i_idx ? rgz[7] : (i_mms?idxp_q[7:0]:busd_d);
+
+// temporary pointer select
 assign tprh_r = 1'b0;
 assign tprh_w = (chk_rgw & i_mmt & ~is_nxta&~is_data) | (chk_tpi&i_mmt);
 assign tprh_d = chk_tpi ? idxp_q[15:8] : busd_d;
 assign tprl_r = 1'b0;
 assign tprl_w = (chk_rgw & i_mmt & is_nxta&~is_data) | (chk_tpi&i_mmt);
 assign tprl_d = chk_tpi ? idxp_q[7:0] : busd_d;
+
+// temp register select
 assign temp_r = chk_rgr & ((is_rr & addrd[6])|(i_aid & addwr[6] & is_last));
 assign temp_w = chk_rgw & is_wr & addwr[6];
 assign temp_d = i_aid ? idrg_q : busd_d;
-assign intr_r = 1'b0;
+
+// increment/decrement for 8-bit registers
 assign idrg_r = chk_rgr & i_aid & ~is_last;
 generate
 	for(i=0;i<8;i=i+1) begin // select increment/decrement input
@@ -885,18 +910,11 @@ generate
 	end
 endgenerate
 assign idr_op = ireg_q[0];
-// daa comparators
-wire daal_b, daah_b;
-assign daal_b = rgq[7][3]&(rgq[7][2]|rgq[7][1])|rgq[6][4];
-assign daah_b = rgq[7][7]&(rgq[7][6]|rgq[7][5])|rgq[6][0];
-wire[7:0] daad_d;
-assign daad_d[3:0] = daal_b ? 4'b0110 : 4'b0000;
-assign daad_d[7:4] = daah_b ? 4'b0110 : 4'b0000;
+
+// alu inputs select
+wire[7:0] oprx_d;
 wire e_bus;
 assign e_bus = ~i_dad & ~i_acc;
-zbuffer op2x (i_acc,daad_d,opr2_d);
-// alu inputs
-wire[7:0] oprx_d;
 assign oprx_d = sel_p ? rgq[5] : rgq[4];
 assign opr1_d = i_dad ? oprx_d : rgq[7];
 generate
@@ -913,6 +931,7 @@ generate
 		end
 	end
 endgenerate
+zbuffer op2x (i_acc,daad_d,opr2_d);
 assign alu_op = i_dad ? {2'b00,~sel_p} : (i_acc ? 3'b000 : ireg_q[5:3]);
 
 endmodule
