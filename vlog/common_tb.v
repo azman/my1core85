@@ -6,7 +6,6 @@ wire[ADDRSIZE-1:DATASIZE] addr;
 wire clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_, ale, hlda, sod;
 
 // memory model for 8085 testbench
-
 reg[DATASIZE-1:0] memory[(2**ADDRSIZE)-1:0];
 reg[ADDRSIZE-1:0] mem_addr;
 // memory address select
@@ -20,24 +19,46 @@ end
 always @(ale) begin
 	if (ale) begin
 		mem_addr =  { addr, addrdata };
-	//end else begin
-	//	$write("[%05g] LATCHED ADDR = %h\n", $time, mem_addr);
 	end
 end
 // memory write
 always @(posedge wr_) begin
 	if (iom_===1'b0) begin
-		$write("[%05g] WR MEM@%h: %h => ", $time,
-			mem_addr, memory[mem_addr]);
+		$write("[%05g] WR MEM@%h: %h => ",$time,mem_addr,memory[mem_addr]);
 		memory[mem_addr] = addrdata;
-		$write("%h\n", memory[mem_addr]);
+		$write("%h\n",memory[mem_addr]);
 	end
 end
 // memory read
 always @(posedge rd_) begin
-	if (iom_===1'b0) begin // &&s0===1'b0
-		$write("[%05g] RD MEM@%h: %h\n", $time,
-			mem_addr, memory[mem_addr]);
+	if (iom_===1'b0) begin
+		$write("[%05g] RD MEM@%h: %h\n",$time,mem_addr,memory[mem_addr]);
+	end
+end
+
+// i/o model for 8085 testbench
+reg[DATASIZE-1:0] dev_addr;
+// device address select - returns device address on read
+assign addrdata = (rd_===1'b0&&iom_===1'b1) ?
+	dev_addr : {DATASIZE{1'bz}};
+// device address latch
+always @(ale) begin
+	if (ale&iom_===1'b1) begin
+		dev_addr =  addrdata;
+		if(addrdata!==addr) // upper byte should be equal to low byte
+			$write("[%05g] INVALID ADDR? (%h:%h)\n",$time,addr,addrdata);
+	end
+end
+// device write
+always @(posedge wr_) begin
+	if (iom_===1'b1) begin
+		$write("[%05g] WR DEV@%h => %h\n",$time,dev_addr,addrdata);
+	end
+end
+// device read
+always @(posedge rd_) begin
+	if (iom_===1'b1) begin
+		$write("[%05g] RD DEV@%h: %h\n", $time,dev_addr,dev_addr);
 	end
 end
 
