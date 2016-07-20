@@ -65,8 +65,8 @@ always @(negedge clk) begin
 	//	$time,dut.chk_adh, dut.chk_adl, dut.chk_dat);
 	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{chk_pci:%b}{chk_tpi:%b}\n",
 	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_pci, dut.chk_tpi);
-	//$strobe("[%05g] {pcpc_d:%h}{pcpc_w:%b}{accu_d:%h}{accu_w:%b}\n",
-	//	$time,dut.pcpc_d, dut.pcpc_w, dut.accu_d, dut.accu_w);
+	//$strobe("[%05g] {pcpc_d:%h}{pcpc_w:%b}{pctr_q:%h}{pctr_w:%b}\n",
+	//	$time,dut.pcpc_d, dut.pcpc_w, dut.pctr_q, dut.pctr_w);
 	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{temp_d:%h}{temp_w:%b}\n",
 	//	$time,dut.chk_rgr, dut.chk_rgw,dut.temp_d,dut.temp_w);
 	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}{res8_q:%b}\n",

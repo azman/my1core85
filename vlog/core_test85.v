@@ -248,6 +248,7 @@ wire i_dad, i_idx, i_mmx, i_mmt, i_mms;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
 wire i_pop, i_psh, i_jmp, i_jcc, i_cll, i_ret;
+wire i_hpc, i_hsp; // pchl & sphl
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -275,6 +276,8 @@ assign i_jmp = i_sic & lo011 & hi000;
 assign i_jcc = i_sic & lo010; // do i need this???
 assign i_cll = i_sic & lo101 & hi001; // call
 assign i_ret = i_sic & lo001 & hi001; // ret
+assign i_hpc = i_sic & lo001 & hi101;
+assign i_hsp = i_sic & lo001 & hi111;
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -883,10 +886,14 @@ endgenerate
 wire[15:0] pctr_q;
 wire pctr_w, chk_pcc;
 assign chk_pcc = (cstate[3] & ~isfirst & is_data);
-assign pctr_w = (chk_rgw&(i_jmp&is_last))|(chk_pcc&(i_cll|i_ret)&is_last);
+assign pctr_w = (chk_rgw&((i_jmp&is_last)|(i_hpc)))|
+	(chk_pcc&(i_cll|i_ret)&is_last);
 assign pcpc_w = chk_pci | pctr_w;
-assign pctr_q = i_jmp ? {busd_d,temp_q} : (i_ret?{temp_q,busd_d}:tptr_q);
 assign pcpc_d = chk_pci ? idxp_q : pctr_q;
+zbuffer #(16) pcw0 (i_cll,tptr_q,pctr_q);
+zbuffer #(16) pcw1 (i_jmp,{busd_d,temp_q},pctr_q);
+zbuffer #(16) pcw2 (i_ret,{temp_q,busd_d},pctr_q);
+zbuffer #(16) pcw3 (i_hpc,rphl_q,pctr_q);
 // program counter drives data bus?
 zbuffer bpc0 (i_cll&is_data&~is_last,pcpc_q[7:0],busd_q);
 
@@ -896,11 +903,19 @@ assign ireg_d = busd_d;
 
 // stack pointer select
 assign sprh_r = 1'b0;
-assign sprh_w = (chk_rgw&((i_lxi&addrx[6])|(i_idx&addrz[6])))|(chk_tpi&i_mms);
-assign sprh_d = i_idx ? rgz[6] : (i_mms?idxp_q[15:8]:busd_d);
+assign sprh_w = (chk_rgw&((i_lxi&addrx[6])|(i_idx&addrz[6])|i_hsp))|
+	(chk_tpi&i_mms);
+zbuffer sph0 (i_lxi,busd_d,sprh_d);
+zbuffer sph1 (i_idx,rgz[6],sprh_d);
+zbuffer sph2 (i_mms,idxp_q[15:8],sprh_d);
+zbuffer sph3 (i_hsp,rgq[4],sprh_d);
 assign sprl_r = 1'b0;
-assign sprl_w = (chk_rgw&((i_lxi&addrx[7])|(i_idx&addrz[7])))|(chk_tpi&i_mms);
-assign sprl_d = i_idx ? rgz[7] : (i_mms?idxp_q[7:0]:busd_d);
+assign sprl_w = (chk_rgw&((i_lxi&addrx[7])|(i_idx&addrz[7])|i_hsp))|
+	(chk_tpi&i_mms);
+zbuffer spl0 (i_lxi,busd_d,sprl_d);
+zbuffer spl1 (i_idx,rgz[7],sprl_d);
+zbuffer spl2 (i_mms,idxp_q[7:0],sprl_d);
+zbuffer spl3 (i_hsp,rgq[5],sprl_d);
 
 // temporary pointer select
 assign tprh_r = 1'b0;
