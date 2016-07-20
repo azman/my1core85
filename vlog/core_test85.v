@@ -247,7 +247,7 @@ wire i_hlt, i_aid, i_ali, i_lxi;
 wire i_dad, i_idx, i_mmx, i_mmt, i_mms;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
-wire i_pop, i_psh, i_jmp, i_jcc;
+wire i_pop, i_psh, i_jmp, i_jcc, i_cll, i_ret;
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -268,11 +268,13 @@ assign i_rot = i_txa & lo111 & ~ireg_q[5]; // all rotations (4)
 assign i_acc = i_txa & lo111 & hi10x;
 assign i_daa = i_txa & lo111 & hi100;
 assign i_flc = i_txa & lo111 & hi11x;
-assign i_mms = i_sic & lox01 & ~ireg_q[3]; // pop (4), push (4)
-assign i_pop = i_mms & ~ireg_q[2];
-assign i_psh = i_mms & ireg_q[2];
+assign i_pop = i_sic & lo001 & ~ireg_q[3];
+assign i_psh = i_sic & lo101 & ~ireg_q[3];
+assign i_mms = i_pop | i_psh | i_cll | i_ret;
 assign i_jmp = i_sic & lo011 & hi000;
 assign i_jcc = i_sic & lo010; // do i need this???
+assign i_cll = i_sic & lo101 & hi001; // call
+assign i_ret = i_sic & lo001 & hi001; // ret
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -317,6 +319,7 @@ assign cycw2 =
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
 	// cyc_3
+	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
 	// cyc_2
 	(i_txa & lo010 & ~ireg_q[5]) | // ldax,stax (4)
@@ -341,6 +344,7 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
 assign cycd3 =
+	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lo011 & hi01x) | // i/o instruction (2)
 	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
 	(i_txa & hi110 & ireg_q[2] & ~(ireg_q[1]&ireg_q[0])); // inr,dcr,mvi m (3)
@@ -355,6 +359,7 @@ assign cycw4 =
 	// cyc_4 - sub:1-instruction
 	(i_txa & lo010 & hi110); // sta (1)
 assign cycd4 =
+	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi11x) | // sta,lda (2)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
 assign cyc_5 = // 12 instructions
@@ -370,6 +375,7 @@ assign cycw5 =
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi100); // shld (1)
 assign cycd5 =
+	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
 
 // decode cycles required (combinational logic in always block)
@@ -703,8 +709,8 @@ assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
 assign chk_pci = (cstate[2]&(isfirst|(~is_bimc&~do_data[0])));
-assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|~i_go6))|
-	(cstate[5]&~is_bimc&do_data[0]);
+assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop))|
+	(cstate[5]&~is_bimc&(do_data[0]|i_cll));
 
 //------------------------------------------------------------------------------
 // SELECTOR SIGNALS
@@ -874,8 +880,15 @@ generate
 endgenerate
 
 // program counter select
-assign pcpc_w = chk_pci | (chk_rgw&i_jmp&is_last);
-assign pcpc_d = chk_pci ? idxp_q : {busd_d,temp_q};
+wire[15:0] pctr_q;
+wire pctr_w, chk_pcc;
+assign chk_pcc = (cstate[3] & ~isfirst & is_data);
+assign pctr_w = (chk_rgw&(i_jmp&is_last))|(chk_pcc&(i_cll|i_ret)&is_last);
+assign pcpc_w = chk_pci | pctr_w;
+assign pctr_q = i_jmp ? {busd_d,temp_q} : (i_ret?{temp_q,busd_d}:tptr_q);
+assign pcpc_d = chk_pci ? idxp_q : pctr_q;
+// program counter drives data bus?
+zbuffer bpc0 (i_cll&is_data&~is_last,pcpc_q[7:0],busd_q);
 
 // instruction register select
 assign ireg_w = chk_irw;
@@ -891,17 +904,26 @@ assign sprl_d = i_idx ? rgz[7] : (i_mms?idxp_q[7:0]:busd_d);
 
 // temporary pointer select
 assign tprh_r = 1'b0;
-assign tprh_w = (chk_rgw&i_mmt&~is_nxta&~is_data)|(chk_tpi&i_mmt);
+assign tprh_w = (chk_rgw&~is_nxta&~is_data&(i_mmt|i_cll))|
+	(chk_tpi&i_mmt);
 assign tprh_d = chk_tpi ? idxp_q[15:8] : busd_d;
 assign tprl_r = 1'b0;
-assign tprl_w = (chk_rgw&i_mmt&is_nxta&~is_data)|(chk_tpi&i_mmt);
+assign tprl_w = (chk_rgw&is_nxta&~is_data&(i_mmt|i_cll))|
+	(chk_tpi&i_mmt);
 assign tprl_d = chk_tpi ? idxp_q[7:0] : busd_d;
 
 // temp register select
-assign temp_r = chk_rgr & ((is_rr&addrd[6])|(i_aid&addwr[6]&is_last)|
+wire[7:0] tmpi_q, tmpc_q;
+assign temp_r = chk_rgr&((is_rr&addrd[6])|(i_aid&addwr[6]&is_last)|
 	(i_dio&~is_last));
-assign temp_w = chk_rgw & ((is_wr&addwr[6])|((i_jmp|i_dio)&~is_last));
-assign temp_d = i_aid ? idrg_q : busd_d;
+assign temp_w = (chk_rgw&((is_wr&addwr[6])|((i_jmp|i_dio)&~is_last)))|
+	(chk_pcc&(i_cll|i_ret)&~is_last);
+zbuffer tmp0 (is_wr&~i_aid,busd_d,temp_d); // simplify this later!
+zbuffer tmp1 (i_aid,idrg_q,temp_d);
+zbuffer tmp2 (i_cll,pcpc_q[15:8],temp_d);
+zbuffer tmp3 (i_jmp|i_dio|i_ret,busd_d,temp_d);
+// temp register drives data bus
+zbuffer bft0 (i_cll&is_data&is_last,temp_q,busd_q);
 
 // increment/decrement for 8-bit registers
 assign idrg_r = chk_rgr & i_aid & ~is_last;

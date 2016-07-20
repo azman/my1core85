@@ -24,8 +24,8 @@ Completion Progress:
   = {{rlc},{rrc},{ral},{rar},{daa},{cma},{cmc},{stc}} completed (8)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
-  = {(11xx0001){pop rp}} completed (4) {ret,unused,pchl,sphl} ??
-  = {(11xx0101){push rp}} completed (4) {call,unused(3)} ??
+  = {(11xx0001){pop rp},{ret,unused}} completed (6) {pchl,sphl} ??
+  = {(11xx0101){push rp},{call,unused(3)}} completed (8)
   = {(11xxx011){jmp,unused,out,in}} completed (4) {xthl,xchg,di,ei} ??
 
 Note:

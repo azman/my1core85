@@ -70,7 +70,13 @@ d3 // 11_010_011 @ out 80
 80
 db // 11_011_011 @ in 81
 81
+cd// 11_001_101 @ call 1ff0
+f0
+1f
 76 // 01_110_110 @ hlt
+@1ff0 // sub-routine
+35 // 00_110_101 @ dcr m
+c9 // 11_001_001 @ ret
 @2000 // prepare data memory?
 fa
 ce
