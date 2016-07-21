@@ -44,6 +44,8 @@ parameter FLAGBITA = 4;
 parameter FLAGBITP = 2;
 parameter FLAGBITC = 0;
 parameter FLAGMSKC = 8'b00000001;
+// interrupt enable bit!
+parameter INTE_BIT = 8'b00100000;
 
 // port definitions (i/o)
 input CLK, RST_, READY, HOLD, SID, INTR, TRAP, RST75, RST65, RST55;
@@ -146,8 +148,8 @@ register ireg (clk,1'b0,ireg_w,ireg_d,ireg_q);
 
 // serial/interrupt register
 wire[7:0] intr_d, intr_q;
-wire intr_w, intr_r;
-register intr (clk,1'b0,intr_w,intr_d,intr_q);
+wire intr_w, intr_r, inte_q, inte_d;
+register intr (clk,rst,intr_w,intr_d,intr_q);
 zbuffer intb (intr_r,intr_q,busd_q);
 
 // alias data pointer
@@ -249,6 +251,7 @@ wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
 wire i_pop, i_psh, i_jmp, i_jcc, i_cll, i_ret;
 wire i_hpc, i_hsp, i_xch; // pchl & sphl & xchg
+wire i_edi, i_xhl; // xthl
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -279,6 +282,8 @@ assign i_ret = i_sic & lo001 & hi001; // ret
 assign i_hpc = i_sic & lo001 & hi101;
 assign i_hsp = i_sic & lo001 & hi111;
 assign i_xch = i_sic & lo011 & hi101;
+assign i_edi = i_sic & lo011 & hi11x;
+assign i_xhl = i_sic & lo011 & hi100;
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -322,6 +327,8 @@ assign cycw2 =
 	(i_txa & lo010 & hi0x0) | // stax (2)
 	(i_mov & mem_d & ~mem_s); // all mov with dst=m &src!=m (7)
 assign cycd2 =
+	// cyc_5
+	(i_sic & lo011 & hi100) | // xthl (1)
 	// cyc_3
 	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
@@ -348,6 +355,7 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
 assign cycd3 =
+	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lo011 & hi01x) | // i/o instruction (2)
 	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
@@ -363,6 +371,7 @@ assign cycw4 =
 	// cyc_4 - sub:1-instruction
 	(i_txa & lo010 & hi110); // sta (1)
 assign cycd4 =
+	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi11x) | // sta,lda (2)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
@@ -379,6 +388,7 @@ assign cycw5 =
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi100); // shld (1)
 assign cycd5 =
+	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
 
@@ -424,6 +434,7 @@ reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
 reg[STACTLSZ-1:0] stactl;
 reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 reg isfirst, is_bimc, is_next, is_last, is_nxta, is_data;
+reg is_nxtp, is_fin1;
 // state register - transition on negative edge!
 always @(posedge clk_ or posedge rst) begin
 	if(rst == 1) begin // asynchronous reset
@@ -448,6 +459,8 @@ always @(posedge clk_ or posedge rst) begin
 				is_last <= do_more[0] & ~do_more[1];
 				is_nxta <= do_more[0] & do_more[1] & ~do_data[0] & ~do_data[1];
 				is_data <= do_data[0];
+				is_nxtp <= do_more[2];
+				is_fin1 <= ~do_more[3];
 				// update stactl on T1
 				if (~do_more[0]) begin
 					stactl <= CYCLE_OF;
@@ -722,15 +735,16 @@ assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop))|
 
 // drive address bus (busa_q)
 wire use_d, usepc, usemm, usem0, usem1;
-wire usems, usemt, useio;
+wire usems, usemt, useio, usemx;
 assign use_d = do_data[0];
 assign usepc = ~use_d;
-assign usemm = ~i_mmx & use_d & ~i_mmt & ~i_mms & ~i_dio;
+assign usemm = ~i_mmx & use_d & ~i_mmt & ~i_mms & ~i_dio & ~i_xhl;
 assign usem0 = i_mmx & use_d & ~ireg_q[4];
 assign usem1 = i_mmx & use_d & ireg_q[4];
 assign usems = i_mms & use_d;
 assign usemt = i_mmt & use_d;
 assign useio = i_dio & use_d;
+assign usemx = i_xhl & use_d;
 zbuffer #(16) add0 (usepc,pcpc_q,busa_q);
 zbuffer #(16) add1 (usemm,rphl_q,busa_q);
 zbuffer #(16) add2 (usem0,rpbc_q,busa_q);
@@ -738,6 +752,7 @@ zbuffer #(16) add3 (usem1,rpde_q,busa_q);
 zbuffer #(16) add4 (usems,sptr_q,busa_q);
 zbuffer #(16) add5 (usemt,tptr_q,busa_q);
 zbuffer #(16) add6 (useio,dptr_q,busa_q);
+zbuffer #(16) add7 (usemx,sptr_q,busa_q);
 
 // register addressing
 wire sel_p;
@@ -799,8 +814,10 @@ zbuffer bufb (i_dio&is_last,rgq[7],busd_q);
 
 // input for inx/dcx op
 wire[15:0] pptr_q;
-assign pptr_q = i_mms ? sptr_q : tptr_q;
-assign idx_op = chk_pci|chk_tpi ? (chk_pci?1'b0:ireg_q[2]) : ireg_q[3];
+wire pptr_s;
+assign pptr_q = i_mms | i_xhl ? sptr_q : tptr_q;
+assign pptr_s = i_mms ? ireg_q[2] : ~is_nxtp;
+assign idx_op = chk_pci|chk_tpi ? (chk_pci?1'b0:pptr_s) : ireg_q[3];
 assign idxp_d = chk_pci|chk_tpi ? (chk_pci?pcpc_q:pptr_q) : rprp_q;
 // inx/dcx op to reg
 wire[7:0] addrz;
@@ -816,7 +833,7 @@ endgenerate
 
 // hl input select
 wire is_wx;
-assign is_wx = is_wr | i_lxi | i_lhl | i_pop;
+assign is_wx = is_wr | i_lxi | i_lhl | i_pop | i_xhl;
 wire regh_w, regl_w;
 wire[7:0] regh_d,regl_d;
 zbuffer rgh0 (i_dad,res8_q,regh_d);
@@ -824,20 +841,23 @@ zbuffer rgh1 (is_wx,busd_d,regh_d);
 zbuffer rgh2 (i_idx,rgz[4],regh_d);
 zbuffer rgh3 (i_xch,rgq[2],regh_d);
 assign regh_w = ((i_dad|i_lhl)&~sel_p)|(is_wr&addwr[4])|
-	(i_lxi&addrx[4])|(i_idx&addrz[4])|(i_pop&addrx[4])|i_xch;
+	(i_lxi&addrx[4])|(i_idx&addrz[4])|(i_pop&addrx[4])|i_xch|(i_xhl&is_fin1);
 zbuffer rgl0 (i_dad,res8_q,regl_d);
 zbuffer rgl1 (is_wx,busd_d,regl_d);
 zbuffer rgl2 (i_idx,rgz[5],regl_d);
 zbuffer rgl3 (i_xch,rgq[3],regl_d);
 assign regl_w = ((i_dad|i_lhl)&sel_p)|(is_wr&addwr[5])|
-	(i_lxi&addrx[5])|(i_idx&addrz[5])|(i_pop&addrx[5])|i_xch;
+	(i_lxi&addrx[5])|(i_idx&addrz[5])|(i_pop&addrx[5])|i_xch|(i_xhl&~is_fin1);
 // hl drives data bus
 zbuffer bufh (i_shl&is_last,rgq[4],busd_q);
 zbuffer bufl (i_shl&~is_last,rgq[5],busd_q);
 
 // interrupt mask register
-assign intr_w = chk_rgw & i_sim;
-assign intr_d = rgq[7]; // should mask this???
+wire [7:0] intr_j, intr_k;
+assign intr_k = (rgq[7]&~INTE_BIT)|(intr_q&INTE_BIT);
+assign intr_j = (intr_q&~INTE_BIT)|({2'b00,ireg_q[3],5'b00000});
+assign intr_w = chk_rgw & (i_sim|i_edi);
+assign intr_d = i_sim ? intr_k : intr_j;
 assign intr_r = 1'b0;
 
 // flag input select
@@ -919,28 +939,31 @@ assign ireg_d = busd_d;
 // stack pointer select
 assign sprh_r = 1'b0;
 assign sprh_w = (chk_rgw&((i_lxi&addrx[6])|(i_idx&addrz[6])|i_hsp))|
-	(chk_tpi&i_mms);
+	(chk_tpi&(i_mms|(i_xhl&(~is_nxtp|(is_nxtp&~is_fin1)))));
 zbuffer sph0 (i_lxi,busd_d,sprh_d);
 zbuffer sph1 (i_idx,rgz[6],sprh_d);
-zbuffer sph2 (i_mms,idxp_q[15:8],sprh_d);
+zbuffer sph2 (i_mms|i_xhl,idxp_q[15:8],sprh_d);
 zbuffer sph3 (i_hsp,rgq[4],sprh_d);
 assign sprl_r = 1'b0;
 assign sprl_w = (chk_rgw&((i_lxi&addrx[7])|(i_idx&addrz[7])|i_hsp))|
-	(chk_tpi&i_mms);
+	(chk_tpi&(i_mms|(i_xhl&(~is_nxtp|(is_nxtp&~is_fin1)))));
 zbuffer spl0 (i_lxi,busd_d,sprl_d);
 zbuffer spl1 (i_idx,rgz[7],sprl_d);
-zbuffer spl2 (i_mms,idxp_q[7:0],sprl_d);
+zbuffer spl2 (i_mms|i_xhl,idxp_q[7:0],sprl_d);
 zbuffer spl3 (i_hsp,rgq[5],sprl_d);
 
 // temporary pointer select
 assign tprh_r = 1'b0;
 assign tprh_w = (chk_rgw&~is_nxta&~is_data&(i_mmt|i_cll))|
-	(chk_tpi&i_mmt);
-assign tprh_d = chk_tpi ? idxp_q[15:8] : busd_d;
+	(chk_tpi&i_mmt)|(cstate[4]&i_xhl);
+assign tprh_d = chk_tpi ? idxp_q[15:8] : i_xhl?rgq[4]:busd_d;
 assign tprl_r = 1'b0;
 assign tprl_w = (chk_rgw&is_nxta&~is_data&(i_mmt|i_cll))|
-	(chk_tpi&i_mmt);
-assign tprl_d = chk_tpi ? idxp_q[7:0] : busd_d;
+	(chk_tpi&i_mmt)|(cstate[4]&i_xhl);
+assign tprl_d = chk_tpi ? idxp_q[7:0] : i_xhl?rgq[5]:busd_d;
+// temp pointer drives data bus?
+zbuffer tpp0 (i_xhl&~is_nxtp&~is_last,tprh_q,busd_q);
+zbuffer tpp1 (i_xhl&~is_nxtp&is_last,tprl_q,busd_q);
 
 // temp register select
 wire[7:0] tmpi_q, tmpc_q;

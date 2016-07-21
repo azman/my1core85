@@ -26,7 +26,7 @@ Completion Progress:
   = {{<alu>i data}} completed (8)
   = {{pop rp},{ret},{unused},{pchl},{sphl}} completed (8)
   = {{push rp},{call},{unused(3)}} completed (8)
-  = {(110xx011){jmp,unused,out,in}} completed (4) {xthl,xchg,di,ei} ??
+  = {(110xx011){jmp,unused,out,in,xthl,xchg,di,ei}} completed (8)
   = {(11xxx000){Rccc}} ??
   = {(11xxx010){Jccc}} ??
   = {(11xxx100){Cccc}} ??
