@@ -23,7 +23,7 @@ end
 
 // detect register change
 always @(dut.rgq or dut.temp_q or dut.intr_q or
-		dut.sptr_q or dut.tptr_q or dut.pcpc_q) begin
+		dut.sptr_q or dut.tptr_q) begin //  or dut.pcpc_q
 	$write("[%05g] REGS: ", $time);
 	$write("[B:%h] [C:%h] ", dut.rgq[0], dut.rgq[1]);
 	$write("[D:%h] [E:%h] ", dut.rgq[2], dut.rgq[3]);
@@ -67,8 +67,8 @@ always @(negedge clk) begin
 	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_pci, dut.chk_tpi);
 	//$strobe("[%05g] {pcpc_d:%h}{pcpc_w:%b}{pctr_q:%h}{pctr_w:%b}\n",
 	//	$time,dut.pcpc_d, dut.pcpc_w, dut.pctr_q, dut.pctr_w);
-	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{temp_d:%h}{temp_w:%b}\n",
-	//	$time,dut.chk_rgr, dut.chk_rgw,dut.temp_d,dut.temp_w);
+	//$strobe("[%05g] {rgr:%b}{rgw:%b}{temp_d:%h}{temp_w:%b}\n",
+	//	$time,dut.rgr, dut.rgw,dut.temp_d,dut.temp_w);
 	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}{res8_q:%b}\n",
 	//	$time,dut.rgr, dut.rgw, dut.opr1_d, dut.opr2_d, dut.res8_q);
 	//$strobe("[%05g] {upc:%b}{umm:%b}{um0:%b}{um1:%b}{ums:%b}{umt:%b}\n",

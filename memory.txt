@@ -79,6 +79,7 @@ f0
 f9 // 11_111_001 @ sphl
 e9 // 11_101_001 @ pchl
 @1c00 // ending stage
+eb // 11_101_011 @ xchg
 76 // 01_110_110 @ hlt
 @1ff0 // sub-routine
 35 // 00_110_101 @ dcr m

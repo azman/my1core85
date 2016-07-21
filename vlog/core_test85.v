@@ -248,7 +248,7 @@ wire i_dad, i_idx, i_mmx, i_mmt, i_mms;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
 wire i_pop, i_psh, i_jmp, i_jcc, i_cll, i_ret;
-wire i_hpc, i_hsp; // pchl & sphl
+wire i_hpc, i_hsp, i_xch; // pchl & sphl & xchg
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -278,6 +278,7 @@ assign i_cll = i_sic & lo101 & hi001; // call
 assign i_ret = i_sic & lo001 & hi001; // ret
 assign i_hpc = i_sic & lo001 & hi101;
 assign i_hsp = i_sic & lo001 & hi111;
+assign i_xch = i_sic & lo011 & hi101;
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -821,13 +822,15 @@ wire[7:0] regh_d,regl_d;
 zbuffer rgh0 (i_dad,res8_q,regh_d);
 zbuffer rgh1 (is_wx,busd_d,regh_d);
 zbuffer rgh2 (i_idx,rgz[4],regh_d);
+zbuffer rgh3 (i_xch,rgq[2],regh_d);
 assign regh_w = ((i_dad|i_lhl)&~sel_p)|(is_wr&addwr[4])|
-	(i_lxi&addrx[4])|(i_idx&addrz[4])|(i_pop&addrx[4]);
+	(i_lxi&addrx[4])|(i_idx&addrz[4])|(i_pop&addrx[4])|i_xch;
 zbuffer rgl0 (i_dad,res8_q,regl_d);
 zbuffer rgl1 (is_wx,busd_d,regl_d);
 zbuffer rgl2 (i_idx,rgz[5],regl_d);
+zbuffer rgl3 (i_xch,rgq[3],regl_d);
 assign regl_w = ((i_dad|i_lhl)&sel_p)|(is_wr&addwr[5])|
-	(i_lxi&addrx[5])|(i_idx&addrz[5])|(i_pop&addrx[5]);
+	(i_lxi&addrx[5])|(i_idx&addrz[5])|(i_pop&addrx[5])|i_xch;
 // hl drives data bus
 zbuffer bufh (i_shl&is_last,rgq[4],busd_q);
 zbuffer bufl (i_shl&~is_last,rgq[5],busd_q);
@@ -871,6 +874,18 @@ generate
 		end else if(i==4) begin
 			assign rgw[i] = chk_rgw & regh_w;
 			assign rgd[i] = regh_d;
+			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
+		end else if(i==3) begin
+			assign rgw[i] = chk_rgw &
+				((is_wr&addwr[i])|(i_lxi&addrx[i])|
+				(i_idx&addrz[i])|(i_pop&addrx[i])|i_xch);
+			assign rgd[i] = i_idx ? rgz[i] : i_xch ? rgq[5] : busd_d;
+			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
+		end else if(i==2) begin
+			assign rgw[i] = chk_rgw &
+				((is_wr&addwr[i])|(i_lxi&addrx[i])|
+				(i_idx&addrz[i])|(i_pop&addrx[i])|i_xch);
+			assign rgd[i] = i_idx ? rgz[i] : i_xch ? rgq[4] : busd_d;
 			assign rgr[i] = chk_rgr & ((is_rr&addrd[i])|(i_psh&addrx[i]));
 		end else begin
 			assign rgw[i] = chk_rgw &
