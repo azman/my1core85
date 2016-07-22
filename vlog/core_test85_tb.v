@@ -21,9 +21,14 @@ always begin
 	#(CLKPTIME/2) clk = !clk;
 end
 
+// detect changes on data bus
+//always @(addrdata) begin
+//	$strobe("[%05g] ADDH:[%h],DATA:[%h]",$time,addr,addrdata);
+//end
+
 // detect register change
 always @(dut.rgq or dut.temp_q or dut.intr_q or
-		dut.sptr_q or dut.tptr_q) begin //  or dut.pcpc_q
+		dut.sptr_q or dut.tptr_q  or dut.pcpc_q) begin //
 	$write("[%05g] REGS: ", $time);
 	$write("[B:%h] [C:%h] ", dut.rgq[0], dut.rgq[1]);
 	$write("[D:%h] [E:%h] ", dut.rgq[2], dut.rgq[3]);
@@ -57,7 +62,7 @@ end
 
 // fail-safe stop condition
 always begin
-	#4500 $finish;
+	#5000 $finish;
 end
 
 always @(negedge clk) begin

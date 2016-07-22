@@ -19,18 +19,19 @@ Completion Progress:
   = {{inr reg},{inr m},{dcr reg},{dcr m}} completed (16)
   = {{lxi rp,dat16},{dad rp}} completed (8)
   = {{inx rp},{dcx rp}} completed (8)
-  = {(00xxx000){nop}{unused(5)}{rim}{sim}} completed (8)
+  = {{nop}{unused(5)}{rim}{sim}} completed (8)
   = {{stax rp},{ldax rp},{sta},{lda},{shld},{lhld}} completed (8)
   = {{rlc},{rrc},{ral},{rar},{daa},{cma},{cmc},{stc}} completed (8)
 - Instructions (11xxxxxx) in progress
   = {{<alu>i data}} completed (8)
   = {{pop rp},{ret},{unused},{pchl},{sphl}} completed (8)
   = {{push rp},{call},{unused(3)}} completed (8)
-  = {(110xx011){jmp,unused,out,in,xthl,xchg,di,ei}} completed (8)
+  = {{jmp,unused,out,in,xthl,xchg,di,ei}} completed (8)
+  = {{RST nnn}} completed (8)
   = {(11xxx000){Rccc}} ??
   = {(11xxx010){Jccc}} ??
   = {(11xxx100){Cccc}} ??
-  = {(11xxx111){RSTn}} ??
+- Interrupt facility not done yet!
 
 Note:
 

@@ -251,7 +251,7 @@ wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
 wire i_pop, i_psh, i_jmp, i_jcc, i_cll, i_ret;
 wire i_hpc, i_hsp, i_xch; // pchl & sphl & xchg
-wire i_edi, i_xhl; // xthl
+wire i_rst, i_edi, i_xhl; // xthl
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -274,7 +274,7 @@ assign i_daa = i_txa & lo111 & hi100;
 assign i_flc = i_txa & lo111 & hi11x;
 assign i_pop = i_sic & lo001 & ~ireg_q[3];
 assign i_psh = i_sic & lo101 & ~ireg_q[3];
-assign i_mms = i_pop | i_psh | i_cll | i_ret;
+assign i_mms = i_pop | i_psh | i_cll | i_ret | i_rst;
 assign i_jmp = i_sic & lo011 & hi000;
 assign i_jcc = i_sic & lo010; // do i need this???
 assign i_cll = i_sic & lo101 & hi001; // call
@@ -284,6 +284,7 @@ assign i_hsp = i_sic & lo001 & hi111;
 assign i_xch = i_sic & lo011 & hi101;
 assign i_edi = i_sic & lo011 & hi11x;
 assign i_xhl = i_sic & lo011 & hi100;
+assign i_rst = i_sic & lo111;
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -330,6 +331,7 @@ assign cycd2 =
 	// cyc_5
 	(i_sic & lo011 & hi100) | // xthl (1)
 	// cyc_3
+	(i_sic & lo111) | // rst (8)
 	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
 	// cyc_2
@@ -355,6 +357,7 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
 assign cycd3 =
+	(i_sic & lo111) | // rst (8)
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lo011 & hi01x) | // i/o instruction (2)
@@ -800,7 +803,7 @@ wire accu_w, go_acc;
 wire[7:0] accu_d;
 zbuffer acc0 (isalu,res8_q,accu_d);
 zbuffer acc1 (is_wr,busd_d,accu_d);
-zbuffer acc2 (i_rim,intr_q,accu_d);
+zbuffer acc2 (i_rim,intr_q&~INTE_BIT,accu_d);
 zbuffer acc3 (i_lda,busd_d,accu_d);
 zbuffer acc4 (i_rot,rota_d,accu_d);
 zbuffer acc5 (i_acc,aspc_d,accu_d);
@@ -922,15 +925,16 @@ wire[15:0] pctr_q;
 wire pctr_w, chk_pcc;
 assign chk_pcc = (cstate[3] & ~isfirst & is_data);
 assign pctr_w = (chk_rgw&((i_jmp&is_last)|(i_hpc)))|
-	(chk_pcc&(i_cll|i_ret)&is_last);
+	(chk_pcc&(i_cll|i_ret|i_rst)&is_last);
 assign pcpc_w = chk_pci | pctr_w;
 assign pcpc_d = chk_pci ? idxp_q : pctr_q;
 zbuffer #(16) pcw0 (i_cll,tptr_q,pctr_q);
 zbuffer #(16) pcw1 (i_jmp,{busd_d,temp_q},pctr_q);
-zbuffer #(16) pcw2 (i_ret,{temp_q,busd_d},pctr_q);
+zbuffer #(16) pcw2 (i_ret,{busd_d,temp_q},pctr_q);
 zbuffer #(16) pcw3 (i_hpc,rphl_q,pctr_q);
+zbuffer #(16) pcw4 (i_rst,{10'h000,ireg_q[5:3],3'b000},pctr_q);
 // program counter drives data bus?
-zbuffer bpc0 (i_cll&is_data&~is_last,pcpc_q[7:0],busd_q);
+zbuffer bpc0 (i_cll&is_data&~is_last,pcpc_q[15:8],busd_q);
 
 // instruction register select
 assign ireg_w = chk_irw;
@@ -955,15 +959,24 @@ zbuffer spl3 (i_hsp,rgq[5],sprl_d);
 // temporary pointer select
 assign tprh_r = 1'b0;
 assign tprh_w = (chk_rgw&~is_nxta&~is_data&(i_mmt|i_cll))|
-	(chk_tpi&i_mmt)|(cstate[4]&i_xhl);
-assign tprh_d = chk_tpi ? idxp_q[15:8] : i_xhl?rgq[4]:busd_d;
+	(chk_tpi&i_mmt)|(cstate[4]&i_xhl)|(cstate[4]&i_rst);
+zbuffer tph0 (chk_tpi,idxp_q[15:8],tprh_d);
+zbuffer tph1 (i_xhl,rgq[4],tprh_d);
+zbuffer tph2 (~chk_tpi&~i_xhl&~i_rst,busd_d,tprh_d);
+zbuffer tph3 (i_rst,pcpc_q[15:8],tprh_d);
 assign tprl_r = 1'b0;
 assign tprl_w = (chk_rgw&is_nxta&~is_data&(i_mmt|i_cll))|
-	(chk_tpi&i_mmt)|(cstate[4]&i_xhl);
+	(chk_tpi&i_mmt)|(cstate[4]&i_xhl)|(cstate[4]&i_rst);
 assign tprl_d = chk_tpi ? idxp_q[7:0] : i_xhl?rgq[5]:busd_d;
+zbuffer tpl0 (chk_tpi,idxp_q[7:0],tprl_d);
+zbuffer tpl1 (i_xhl,rgq[5],tprl_d);
+zbuffer tpl2 (~chk_tpi&~i_xhl&~i_rst,busd_d,tprl_d);
+zbuffer tpl3 (i_rst,pcpc_q[7:0],tprl_d);
 // temp pointer drives data bus?
 zbuffer tpp0 (i_xhl&~is_nxtp&~is_last,tprh_q,busd_q);
 zbuffer tpp1 (i_xhl&~is_nxtp&is_last,tprl_q,busd_q);
+zbuffer tpp2 (i_rst&~is_last,tprh_q,busd_q);
+zbuffer tpp3 (i_rst&is_last,tprl_q,busd_q);
 
 // temp register select
 wire[7:0] tmpi_q, tmpc_q;
@@ -973,7 +986,7 @@ assign temp_w = (chk_rgw&((is_wr&addwr[6])|((i_jmp|i_dio)&~is_last)))|
 	(chk_pcc&(i_cll|i_ret)&~is_last);
 zbuffer tmp0 (is_wr&~i_aid,busd_d,temp_d); // simplify this later!
 zbuffer tmp1 (i_aid,idrg_q,temp_d);
-zbuffer tmp2 (i_cll,pcpc_q[15:8],temp_d);
+zbuffer tmp2 (i_cll,pcpc_q[7:0],temp_d);
 zbuffer tmp3 (i_jmp|i_dio|i_ret,busd_d,temp_d);
 // temp register drives data bus
 zbuffer bft0 (i_cll&is_data&is_last,temp_q,busd_q);
