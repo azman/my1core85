@@ -210,6 +210,7 @@ assign lo000 = ~ireg_q[2] & ~ireg_q[1] & ~ireg_q[0];
 assign lo001 = ~ireg_q[2] & ~ireg_q[1] & ireg_q[0];
 assign lo010 = ~ireg_q[2] & ireg_q[1] & ~ireg_q[0];
 assign lo011 = ~ireg_q[2] & ireg_q[1] & ireg_q[0];
+assign lo100 = ireg_q[2] & ~ireg_q[1] & ~ireg_q[0];
 assign lo101 = ireg_q[2] & ~ireg_q[1] & ireg_q[0];
 assign lo110 = ireg_q[2] & ireg_q[1] & ~ireg_q[0];
 assign lo111 = ireg_q[2] & ireg_q[1] & ireg_q[0];
@@ -249,9 +250,11 @@ wire i_hlt, i_aid, i_ali, i_lxi;
 wire i_dad, i_idx, i_mmx, i_mmt, i_mms;
 wire i_rim, i_sim, i_dio, i_go6, i_mvi, i_sta, i_lda;
 wire i_shl, i_lhl, i_rot, i_acc, i_daa, i_flc;
-wire i_pop, i_psh, i_jmp, i_jcc, i_cll, i_ret;
+wire i_pop, i_psh, i_jmp, i_cll, i_ret;
+wire i_jcc, i_ccc, i_rcc, i_zcc;
 wire i_hpc, i_hsp, i_xch; // pchl & sphl & xchg
 wire i_rst, i_edi, i_xhl; // xthl
+wire i_jxx, i_cxx, i_rxx;
 assign i_hlt = i_mov & mem_d & mem_s;
 assign i_aid = i_txa & lo10x; // increment/decrement
 assign i_ali = i_sic & lo110; // alu immediate
@@ -276,7 +279,6 @@ assign i_pop = i_sic & lo001 & ~ireg_q[3];
 assign i_psh = i_sic & lo101 & ~ireg_q[3];
 assign i_mms = i_pop | i_psh | i_cll | i_ret | i_rst;
 assign i_jmp = i_sic & lo011 & hi000;
-assign i_jcc = i_sic & lo010; // do i need this???
 assign i_cll = i_sic & lo101 & hi001; // call
 assign i_ret = i_sic & lo001 & hi001; // ret
 assign i_hpc = i_sic & lo001 & hi101;
@@ -285,6 +287,13 @@ assign i_xch = i_sic & lo011 & hi101;
 assign i_edi = i_sic & lo011 & hi11x;
 assign i_xhl = i_sic & lo011 & hi100;
 assign i_rst = i_sic & lo111;
+assign i_jcc = i_sic & lo010;
+assign i_ccc = i_sic & lo100;
+assign i_rcc = i_sic & lo000;
+assign i_zcc = (i_jcc|i_ccc|i_rcc);
+assign i_jxx = i_jmp | i_jcc;
+assign i_cxx = i_cll | i_ccc;
+assign i_rxx = i_ret | i_rcc;
 assign i_go6 =
 	(i_txa & lo011) | // 00xxx011 - inx/dcx (8)
 	(i_sic & lo111) | // 11xxx111 - rst n (8)
@@ -437,7 +446,7 @@ reg[STATECNT-1:0] cstate, nstate; // 1-hot encoded states
 reg[STACTLSZ-1:0] stactl;
 reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 reg isfirst, is_bimc, is_next, is_last, is_nxta, is_data;
-reg is_nxtp, is_fin1;
+reg is_nxtp, is_fin1, is_cond, do_skip;
 // state register - transition on negative edge!
 always @(posedge clk_ or posedge rst) begin
 	if(rst == 1) begin // asynchronous reset
@@ -454,6 +463,7 @@ always @(posedge clk_ or posedge rst) begin
 				do_more <= {INFO_CYC{1'b0}};
 				dowrite <= {INFO_CYC{1'b0}};
 				do_data <= {INFO_CYC{1'b0}};
+				is_cond <= 1'b0;
 			end
 			STATE_T1: begin
 				isfirst <= ~do_more[0];
@@ -464,6 +474,7 @@ always @(posedge clk_ or posedge rst) begin
 				is_data <= do_data[0];
 				is_nxtp <= do_more[2];
 				is_fin1 <= ~do_more[3];
+				do_skip <= 1'b0;
 				// update stactl on T1
 				if (~do_more[0]) begin
 					stactl <= CYCLE_OF;
@@ -485,15 +496,25 @@ always @(posedge clk_ or posedge rst) begin
 			end
 			STATE_T3: begin
 				// update next machine cycle here
-				do_more <= do_more >> 1;
-				dowrite <= dowrite >> 1;
-				do_data <= do_data >> 1;
+				if (is_cond&~flags) begin
+					do_more <= {INFO_CYC{1'b0}};
+					dowrite <= {INFO_CYC{1'b0}};
+					do_data <= {INFO_CYC{1'b0}};
+					is_cond <= 1'b0;
+					do_skip <= 1'b1;
+				end else begin
+					do_more <= do_more >> 1;
+					dowrite <= dowrite >> 1;
+					do_data <= do_data >> 1;
+				end
 			end
 			STATE_T4: begin
 				// assign next machine cycle here
 				do_more <= cycgo;
 				dowrite <= cycrw;
 				do_data <= cyccd;
+				// check conditional instructions
+				is_cond <= i_zcc;
 			end
 		endcase
 	end
@@ -728,9 +749,9 @@ assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
 	(((cstate[4]&~i_go6)|cstate[6])&~do_more[0]);
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
-assign chk_pci = (cstate[2]&(isfirst|(~is_bimc&~do_data[0])));
+assign chk_pci = (cstate[2]&(isfirst|(~is_bimc&~do_data[0])))|do_skip;
 assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop))|
-	(cstate[5]&~is_bimc&(do_data[0]|i_cll));
+	(cstate[5]&~is_bimc&(do_data[0]|i_cxx));
 
 //------------------------------------------------------------------------------
 // SELECTOR SIGNALS
@@ -765,7 +786,7 @@ wire[7:0] addwr, addrd, addrx, addrp;
 assign r1add = ireg_q[5:3];
 assign r2add = ireg_q[2:0];
 assign rpadd = ireg_q[5:4];
-assign rxadd = {rpadd,i_pop?~sel_p:sel_p};
+assign rxadd = {rpadd,i_psh?~sel_p:sel_p};
 decoder r1dec (r1add,addwr);
 decoder r2dec (r2add,addrd);
 decoder rxdec (rxadd,addrx);
@@ -809,7 +830,7 @@ zbuffer acc4 (i_rot,rota_d,accu_d);
 zbuffer acc5 (i_acc,aspc_d,accu_d);
 zbuffer acc6 (i_pop,busd_d,accu_d);
 zbuffer acc7 (i_dio&is_last,busd_d,accu_d);
-assign go_acc = isalu|i_rim|i_lda|i_rot|i_acc|(i_dio&is_last);
+assign go_acc = isalu|i_rim|i_rot|i_acc|((i_lda|i_dio)&is_last);
 assign accu_w = go_acc|(is_wr&addwr[7])|(i_pop&addrx[7]);
 // acc drives data bus
 zbuffer bufa (i_sta,rgq[7],busd_q);
@@ -819,7 +840,7 @@ zbuffer bufb (i_dio&is_last,rgq[7],busd_q);
 wire[15:0] pptr_q;
 wire pptr_s;
 assign pptr_q = i_mms | i_xhl ? sptr_q : tptr_q;
-assign pptr_s = i_mms ? ireg_q[2] : ~is_nxtp;
+assign pptr_s = i_mms ? ireg_q[2] : i_xhl?~is_nxtp:is_nxtp;
 assign idx_op = chk_pci|chk_tpi ? (chk_pci?1'b0:pptr_s) : ireg_q[3];
 assign idxp_d = chk_pci|chk_tpi ? (chk_pci?pcpc_q:pptr_q) : rprp_q;
 // inx/dcx op to reg
@@ -924,17 +945,17 @@ endgenerate
 wire[15:0] pctr_q;
 wire pctr_w, chk_pcc;
 assign chk_pcc = (cstate[3] & ~isfirst & is_data);
-assign pctr_w = (chk_rgw&((i_jmp&is_last)|(i_hpc)))|
-	(chk_pcc&(i_cll|i_ret|i_rst)&is_last);
+assign pctr_w = (chk_rgw&((i_jxx&is_last)|(i_hpc)))|
+	(chk_pcc&(i_cxx|i_rxx|i_rst)&is_last);
 assign pcpc_w = chk_pci | pctr_w;
 assign pcpc_d = chk_pci ? idxp_q : pctr_q;
-zbuffer #(16) pcw0 (i_cll,tptr_q,pctr_q);
-zbuffer #(16) pcw1 (i_jmp,{busd_d,temp_q},pctr_q);
-zbuffer #(16) pcw2 (i_ret,{busd_d,temp_q},pctr_q);
+zbuffer #(16) pcw0 (i_cxx,tptr_q,pctr_q);
+zbuffer #(16) pcw1 (i_jxx,{busd_d,temp_q},pctr_q);
+zbuffer #(16) pcw2 (i_rxx,{busd_d,temp_q},pctr_q);
 zbuffer #(16) pcw3 (i_hpc,rphl_q,pctr_q);
 zbuffer #(16) pcw4 (i_rst,{10'h000,ireg_q[5:3],3'b000},pctr_q);
 // program counter drives data bus?
-zbuffer bpc0 (i_cll&is_data&~is_last,pcpc_q[15:8],busd_q);
+zbuffer bpc0 (i_cxx&is_data&~is_last,pcpc_q[15:8],busd_q);
 
 // instruction register select
 assign ireg_w = chk_irw;
@@ -958,14 +979,14 @@ zbuffer spl3 (i_hsp,rgq[5],sprl_d);
 
 // temporary pointer select
 assign tprh_r = 1'b0;
-assign tprh_w = (chk_rgw&~is_nxta&~is_data&(i_mmt|i_cll))|
+assign tprh_w = (chk_rgw&~is_nxta&~is_data&(i_mmt|i_cxx))|
 	(chk_tpi&i_mmt)|(cstate[4]&i_xhl)|(cstate[4]&i_rst);
 zbuffer tph0 (chk_tpi,idxp_q[15:8],tprh_d);
 zbuffer tph1 (i_xhl,rgq[4],tprh_d);
 zbuffer tph2 (~chk_tpi&~i_xhl&~i_rst,busd_d,tprh_d);
 zbuffer tph3 (i_rst,pcpc_q[15:8],tprh_d);
 assign tprl_r = 1'b0;
-assign tprl_w = (chk_rgw&is_nxta&~is_data&(i_mmt|i_cll))|
+assign tprl_w = (chk_rgw&is_nxta&~is_data&(i_mmt|i_cxx))|
 	(chk_tpi&i_mmt)|(cstate[4]&i_xhl)|(cstate[4]&i_rst);
 assign tprl_d = chk_tpi ? idxp_q[7:0] : i_xhl?rgq[5]:busd_d;
 zbuffer tpl0 (chk_tpi,idxp_q[7:0],tprl_d);
@@ -982,14 +1003,14 @@ zbuffer tpp3 (i_rst&is_last,tprl_q,busd_q);
 wire[7:0] tmpi_q, tmpc_q;
 assign temp_r = chk_rgr&((is_rr&addrd[6])|(i_aid&addwr[6]&is_last)|
 	(i_dio&~is_last));
-assign temp_w = (chk_rgw&((is_wr&addwr[6])|((i_jmp|i_dio)&~is_last)))|
-	(chk_pcc&(i_cll|i_ret)&~is_last);
+assign temp_w = (chk_rgw&((is_wr&addwr[6])|((i_jxx|i_dio)&~is_last)))|
+	(chk_pcc&(i_cxx|i_rxx)&~is_last);
 zbuffer tmp0 (is_wr&~i_aid,busd_d,temp_d); // simplify this later!
 zbuffer tmp1 (i_aid,idrg_q,temp_d);
-zbuffer tmp2 (i_cll,pcpc_q[7:0],temp_d);
-zbuffer tmp3 (i_jmp|i_dio|i_ret,busd_d,temp_d);
+zbuffer tmp2 (i_cxx,pcpc_q[7:0],temp_d);
+zbuffer tmp3 (i_jxx|i_dio|i_rxx,busd_d,temp_d);
 // temp register drives data bus
-zbuffer bft0 (i_cll&is_data&is_last,temp_q,busd_q);
+zbuffer bft0 (i_cxx&is_data&is_last,temp_q,busd_q);
 
 // increment/decrement for 8-bit registers
 assign idrg_r = chk_rgr & i_aid & ~is_last;

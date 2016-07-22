@@ -28,8 +28,8 @@ Completion Progress:
   = {{push rp},{call},{unused(3)}} completed (8)
   = {{jmp,unused,out,in,xthl,xchg,di,ei}} completed (8)
   = {{RST nnn}} completed (8)
+  = {{JC,JNC,JP,PM,JZ,JNZ,JPE,JPO}} completed (8)
   = {(11xxx000){Rccc}} ??
-  = {(11xxx010){Jccc}} ??
   = {(11xxx100){Cccc}} ??
 - Interrupt facility not done yet!
 

@@ -28,7 +28,7 @@ end
 
 // detect register change
 always @(dut.rgq or dut.temp_q or dut.intr_q or
-		dut.sptr_q or dut.tptr_q  or dut.pcpc_q) begin //
+		dut.sptr_q or dut.tptr_q) begin // or dut.pcpc_q
 	$write("[%05g] REGS: ", $time);
 	$write("[B:%h] [C:%h] ", dut.rgq[0], dut.rgq[1]);
 	$write("[D:%h] [E:%h] ", dut.rgq[2], dut.rgq[3]);
@@ -43,6 +43,8 @@ end
 always @(dut.cstate) begin
 	//$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
 	//	dut.cstate, dut.stactl,addr,addrdata,dut.busd_d,dut.busd_q);
+	//$strobe("[%05g] STATE: %b {%b}[%h][%h][%b][%b]",$time,
+	//	dut.cstate, dut.stactl,addr,addrdata,dut.i_zcc,dut.flags);
 end
 
 // detect new instruction
@@ -62,7 +64,7 @@ end
 
 // fail-safe stop condition
 always begin
-	#5000 $finish;
+	#5500 $finish;
 end
 
 always @(negedge clk) begin
