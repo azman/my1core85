@@ -1,4 +1,4 @@
-module test85_tb();
+module core85_tb();
 
 parameter CLKPTIME = 10;
 parameter DATASIZE = 8;
@@ -82,7 +82,7 @@ always @(negedge clk) begin
 	//	$time,dut.usepc,dut.usemm,dut.usem0,dut.usem1,dut.usems,dut.usemt);
 end
 
-test85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,
+core85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,
 	addrdata, addr, clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_,
 	ale, hlda, sod);
 

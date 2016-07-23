@@ -1,4 +1,4 @@
-module test85 ( CLK, RST_, READY, HOLD, SID, INTR, TRAP, RST75, RST65, RST55,
+module core85 ( CLK, RST_, READY, HOLD, SID, INTR, TRAP, RST75, RST65, RST55,
 	ADDRDATA, ADDR, CLK_OUT, RST_OUT, IOM_, S1, S0, INTA_, WR_, RD_,
 	ALE, HLDA, SOD ); //VCC, VSS // power lines //X1, X2, // cystal input
 
