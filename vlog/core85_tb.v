@@ -1,8 +1,6 @@
 module core85_tb();
 
-parameter CLKPTIME = 10;
-parameter DATASIZE = 8;
-parameter ADDRSIZE = 16;
+parameter CLKPTIME = 10; // time unit per clock cycle
 
 // get tasks and functions from common_tb
 `include "common_tb.v"
@@ -21,6 +19,12 @@ always begin
 	#(CLKPTIME/2) clk = !clk;
 end
 
+// detect new state (alternative to using monitor)
+//always @(dut.cstate) begin
+	//$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
+	//	dut.cstate, dut.stactl,addr,addrdata,dut.busd_d,dut.busd_q);
+//end
+
 // detect changes on data bus
 //always @(addrdata) begin
 //	$strobe("[%05g] ADDH:[%h],DATA:[%h]",$time,addr,addrdata);
@@ -37,14 +41,6 @@ always @(dut.rgq or dut.temp_q or dut.intr_q or
 	$write("[%05g] REGS: ", $time);
 	$write("[I:%h] [T:%h] [M:%h] ", dut.ireg_q, dut.temp_q, dut.intr_q);
 	$write("[PC:%h] [SP:%h] [TP:%h]\n", dut.pcpc_q, dut.sptr_q, dut.tptr_q);
-end
-
-// detect new state (alternative to using monitor)
-always @(dut.cstate) begin
-	//$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
-	//	dut.cstate, dut.stactl,addr,addrdata,dut.busd_d,dut.busd_q);
-	//$strobe("[%05g] STATE: %b {%b}[%h][%h][%b][%b]",$time,
-	//	dut.cstate, dut.stactl,addr,addrdata,dut.i_zcc,dut.flags);
 end
 
 // detect new instruction
@@ -67,6 +63,7 @@ always begin
 	#6000 $finish;
 end
 
+// detect status bits on new t-state
 always @(negedge clk) begin
 	//$strobe("[%05g] {chk_adh:%b}{chk_adhl:%b}{chk_dat:%b}\n",
 	//	$time,dut.chk_adh, dut.chk_adl, dut.chk_dat);
@@ -74,16 +71,12 @@ always @(negedge clk) begin
 	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_pci, dut.chk_tpi);
 	//$strobe("[%05g] {pcpc_d:%h}{pcpc_w:%b}{pctr_q:%h}{pctr_w:%b}\n",
 	//	$time,dut.pcpc_d, dut.pcpc_w, dut.pctr_q, dut.pctr_w);
-	//$strobe("[%05g] {rgr:%b}{rgw:%b}{temp_d:%h}{temp_w:%b}\n",
-	//	$time,dut.rgr, dut.rgw,dut.temp_d,dut.temp_w);
-	//$strobe("[%05g] {rgr:%b}{rgw:%b}{opr1_d:%b}{opr2_d:%b}{res8_q:%b}\n",
-	//	$time,dut.rgr, dut.rgw, dut.opr1_d, dut.opr2_d, dut.res8_q);
 	//$strobe("[%05g] {upc:%b}{umm:%b}{um0:%b}{um1:%b}{ums:%b}{umt:%b}\n",
 	//	$time,dut.usepc,dut.usemm,dut.usem0,dut.usem1,dut.usems,dut.usemt);
 end
 
 core85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,
-	addrdata, addr, clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_,
+	addrdata, addrhigh, clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_,
 	ale, hlda, sod);
 
 endmodule
