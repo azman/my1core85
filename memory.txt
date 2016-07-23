@@ -84,19 +84,31 @@ cd// 11_001_101 @ call 1ff0
 f0
 1f
 f9 // 11_111_001 @ sphl
-21 // 00_100_001 @ lxi h, 2000
+21 // 00_100_001 @ lxi h, 1c00
 00
 1c
-e9 // 11_101_001 @ pchl
-@1c00 // ending stage
 eb // 11_101_011 @ xchg
 e3 // 11_100_011 @ xthl
 fb // 11_111_011 @ ei
 f3 // 11_110_011 @ di
 e7 // 11_100_111 @ rst 4
+eb // 11_101_011 @ xchg
+e9 // 11_101_001 @ pchl
+@1a00 // conditionals
+0e // 00_001_110 @ mvi c, 2
+02
+0d // 00_001_101 @ dcr c
+c8 // 11_001_000 @ rz
+c3 // 11_000_011 @ jmp 1a02
+02
+1a
+@1c00 // ending stage
+af // 10_101_111 @ xra a
+ec // 11_101_100 @ cpe 1a00
+00
+1a
 76 // 01_110_110 @ hlt
 @1ff0 // sub-routine
-35 // 00_110_101 @ dcr m
 c9 // 11_001_001 @ ret
 @2000 // prepare data memory?
 fa

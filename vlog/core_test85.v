@@ -277,7 +277,7 @@ assign i_daa = i_txa & lo111 & hi100;
 assign i_flc = i_txa & lo111 & hi11x;
 assign i_pop = i_sic & lo001 & ~ireg_q[3];
 assign i_psh = i_sic & lo101 & ~ireg_q[3];
-assign i_mms = i_pop | i_psh | i_cll | i_ret | i_rst;
+assign i_mms = i_pop | i_psh | i_cxx | i_rxx | i_rst;
 assign i_jmp = i_sic & lo011 & hi000;
 assign i_cll = i_sic & lo101 & hi001; // call
 assign i_ret = i_sic & lo001 & hi001; // ret
@@ -340,6 +340,7 @@ assign cycd2 =
 	// cyc_5
 	(i_sic & lo011 & hi100) | // xthl (1)
 	// cyc_3
+	(i_sic & lo000 ) | // rccc (8) - or one
 	(i_sic & lo111) | // rst (8)
 	(i_sic & lo001 & hi001 ) | // ret (1)
 	(i_sic & lox01 & ~ireg_q[3]) | // pop, push (4)
@@ -366,6 +367,7 @@ assign cycw3 = // sub:16-instructions
 	(i_sic & lo101 & ~ireg_q[3]) | // push (4)
 	(i_sic & lo011 & hi010); // out instruction (1)
 assign cycd3 =
+	(i_sic & lo000 ) | // rccc (8) - or one
 	(i_sic & lo111) | // rst (8)
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo001 & hi001 ) | // ret (1)
@@ -376,30 +378,32 @@ assign cyc_4 = // 2 instructions
 	(i_txa & lo010 & hi11x); // sta,lda (2)
 assign cycw4 =
 	// cyc_5
-	(i_sic & lo010) | // cccc (8)
+	(i_sic & lo100) | // cccc (8)
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi100) | // shld (1)
 	// cyc_4 - sub:1-instruction
 	(i_txa & lo010 & hi110); // sta (1)
 assign cycd4 =
+	(i_sic & lo100) | // cccc (8)
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi11x) | // sta,lda (2)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
 assign cyc_5 = // 12 instructions
 	// conditionals
-	(i_sic & lo010) | // cccc (8)
+	(i_sic & lo100) | // cccc (8)
 	// always
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
 assign cycw5 =
-	(i_sic & lo010) | // cccc (8)
+	(i_sic & lo100) | // cccc (8)
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi100); // shld (1)
 assign cycd5 =
+	(i_sic & lo100) | // cccc (8)
 	(i_sic & lo011 & hi100) | // xthl (1)
 	(i_sic & lo101 & hi001) | // call (1)
 	(i_txa & lo010 & hi10x); // shld, lhld (2)
@@ -515,6 +519,14 @@ always @(posedge clk_ or posedge rst) begin
 				do_data <= cyccd;
 				// check conditional instructions
 				is_cond <= i_zcc;
+			end
+			STATE_T6: begin
+				if (is_cond&~flags) begin // conditional returns need this!
+					do_more <= {INFO_CYC{1'b0}};
+					dowrite <= {INFO_CYC{1'b0}};
+					do_data <= {INFO_CYC{1'b0}};
+					is_cond <= 1'b0;
+				end
 			end
 		endcase
 	end
@@ -750,8 +762,8 @@ assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
 assign chk_pci = (cstate[2]&(isfirst|(~is_bimc&~do_data[0])))|do_skip;
-assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop))|
-	(cstate[5]&~is_bimc&(do_data[0]|i_cxx));
+assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop|i_rxx))|
+	(cstate[5]&~is_bimc&((do_data[0]&~i_rcc)|i_cxx));
 
 //------------------------------------------------------------------------------
 // SELECTOR SIGNALS

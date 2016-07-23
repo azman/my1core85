@@ -28,11 +28,16 @@ Completion Progress:
   = {{push rp},{call},{unused(3)}} completed (8)
   = {{jmp,unused,out,in,xthl,xchg,di,ei}} completed (8)
   = {{RST nnn}} completed (8)
-  = {{JC,JNC,JP,PM,JZ,JNZ,JPE,JPO}} completed (8)
-  = {(11xxx000){Rccc}} ??
-  = {(11xxx100){Cccc}} ??
-- Interrupt facility not done yet!
+  = {{JNZ,JZ,JNC,JC,JPO,JPE,JP,PM}} completed (8)
+  = {{RNZ,RZ,RNC,RC,RPO,RPE,RP,RM}} completed (8)
+  = {{CNZ,CZ,CNC,CC,CPO,CPE,CP,CM}} completed (8)
+- Not implemented... yet
+  = interrupt facility (valid interrupt flip-flop?)
+  = hold acknowledge (need to clarify when to do that ? cycles after ?)
+  = serial facility? should be just connect the line?
+
 
 Note:
 
 - serial/interrupt mask register is ready (rim/sim), but not currently used
+- need a more efficient test method :p

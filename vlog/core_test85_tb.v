@@ -64,7 +64,7 @@ end
 
 // fail-safe stop condition
 always begin
-	#5500 $finish;
+	#6000 $finish;
 end
 
 always @(negedge clk) begin
