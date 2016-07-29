@@ -266,3 +266,21 @@ function[2*8-1:0] decode_ccc;
 		decode_ccc = text;
 	end
 endfunction
+
+function[7:0] reg8_name;
+	input[2:0] radd;
+	reg[7:0] text;
+	begin
+		case(radd)
+			3'b000: text = "B";
+			3'b001: text = "C";
+			3'b010: text = "D";
+			3'b011: text = "E";
+			3'b100: text = "H";
+			3'b101: text = "L";
+			3'b110: text = "F";
+			3'b111: text = "A";
+		endcase
+		reg8_name = text;
+	end
+endfunction
