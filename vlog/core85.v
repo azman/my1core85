@@ -44,8 +44,6 @@ parameter FLAGBITA = 4;
 parameter FLAGBITP = 2;
 parameter FLAGBITC = 0;
 parameter FLAGMSKC = 8'b00000001;
-// interrupt enable bit!
-parameter INTE_BIT = 8'b00100000;
 
 // port definitions (i/o)
 input CLK, RST_, READY, HOLD, SID, INTR, TRAP, RST75, RST65, RST55;
@@ -67,6 +65,7 @@ assign rst = ~RST_;
 // alias for output signals (driver)
 wire stat_iom_, stat_s1, stat_s0;
 wire ctrl_inta_, ctrl_wr_, ctrl_rd_, ctrl_ale;
+wire opin_sod;
 // assign output pins
 assign CLK_OUT = clk; // simply pass
 assign RST_OUT = rst; // simply pass
@@ -79,7 +78,11 @@ assign RD_ = ctrl_rd_;
 assign ALE = ctrl_ale;
 // not implementing these for now
 assign HLDA = 1'b0;
-assign SOD = 1'b0;
+assign SOD = opin_sod;
+
+//------------------------------------------------------------------------------
+// BUS ASSIGNMENTS
+//------------------------------------------------------------------------------
 
 // alias/control signals for data/address busses
 wire chk_adh, chk_adl, chk_dat;
@@ -146,11 +149,80 @@ wire[7:0] ireg_d, ireg_q;
 wire ireg_w;
 register ireg (clk,1'b0,ireg_w,ireg_d,ireg_q);
 
-// serial/interrupt register
+// serial/interrupt config register - sim
 wire[7:0] intr_d, intr_q;
-wire intr_w, intr_r, inte_q, inte_d;
-register intr (clk,rst,intr_w,intr_d,intr_q);
-zbuffer intb (intr_r,intr_q,busd_q);
+wire intr_w;
+
+// register for serial out sod
+wire psdo_w, psdo_d, psdo_q;
+register #(1) psdo (clk,rst,psdo_w,psdo_d,psdo_q);
+assign psdo_d = intr_d[7];
+assign psdo_w = intr_w & intr_d[6];
+// drive output pin
+assign opin_sod = psdo_q; // TEST THIS ON REAL THINGY!!!
+
+// interrupt enable register
+wire ienb_w, ienb_d, ienb_q, ienb_r;
+register #(1) ienb (clk,ienb_r,ienb_w,ienb_d,ienb_q);
+
+// interrupt masks
+wire im75_w, im75_d, im75_q;
+register #(1) fm75 (clk,rst,im75_w,im75_d,im75_q);
+assign im75_d = ~intr_d[2];
+assign im75_w = intr_w & intr_d[3];
+wire im65_w, im65_d, im65_q;
+register #(1) fm65 (clk,rst,im65_w,im65_d,im65_q);
+assign im65_d = ~intr_d[1];
+assign im65_w = intr_w & intr_d[3];
+wire im55_w, im55_d, im55_q;
+register #(1) fm55 (clk,rst,im55_w,im55_d,im55_q);
+assign im55_d = ~intr_d[0];
+assign im55_w = intr_w & intr_d[3];
+// flags for interrupt masks
+wire mask75, mask65, mask55;
+assign mask75 = ~im75_q;
+assign mask65 = ~im65_q;
+assign mask55 = ~im55_q;
+
+// for signal probing
+assign intr_q = {psdo_q,4'b0000,mask75,mask65,mask55};
+
+// serial/interrupt status register - rim
+wire[7:0] ints_q;
+
+// special ff for rst75 (edge-triggerred)
+wire ir75_q,ir75_r;
+register #(1) rst75 (RST75,ir75_r,~mask75,1'b1,ir75_q);
+assign ir75_r = rst | (intr_w&intr_d[4]);
+
+// special ff for trap (edge-triggerred AND level)
+wire irqt_q,irqt_r,irqt_d;
+register #(1) itrap (TRAP,irqt_r,1'b1,1'b1,irqt_d);
+assign irqt_q = irqt_d & TRAP;
+assign ir75_r = 1'b1; // for now ALWAYS reset -- check this later
+
+// signal for interrupt pending status
+wire ip75_q, ip65_q, ip55_q, trap_q;
+assign ip75_q = ienb_q & ~mask75 & ir75_q; //pending rst7.5
+assign ip65_q = ienb_q & ~mask65 & RST65; //pending rst6.5
+assign ip55_q = ienb_q & ~mask55 & RST55; //pending rst5.5
+assign trap_q = irqt_q; //pending trap - cannot be masked or ignored!
+
+// for signal probing
+assign ints_q = {SID,ip75_q,ip65_q,ip55_q,ienb_q,mask75,mask65,mask55};
+
+// signal for valid interrupt
+wire vint_q;
+assign vint_q = trap_q|ip75_q|ip65_q|ip55_q;
+
+// special ff for internal interrupt acknowledge
+wire inta_q,inta_r,inta_w;
+register #(1) int_a (clk,inta_r,inta_w,vint_q,inta_q);
+
+// halt ff is needed to allow hold -> halt transition
+wire halt_w, halt_d, halt_q, is_halt;
+register #(1) halt (clk,rst,halt_w,halt_d,halt_q);
+assign is_halt = halt_q;
 
 // alias data pointer
 wire[15:0] rpbc_q, rpde_q, rphl_q, sptr_q, tptr_q, dptr_q;
@@ -193,7 +265,7 @@ assign daad_d[3:0] = daal_b ? 4'b0110 : 4'b0000;
 assign daad_d[7:4] = daah_b ? 4'b0110 : 4'b0000;
 
 //------------------------------------------------------------------------------
-// INSTRUCTION DECODING LOGIC BLOCK
+// INSTRUCTION DECODING LOGIC BLOCK (MAIN 2-3-3 DECODING)
 //------------------------------------------------------------------------------
 
 // top 2-bits instruction decoding
@@ -239,6 +311,10 @@ assign hi0x0 = ~ireg_q[5] & ~ireg_q[3];
 assign hi0x1 = ~ireg_q[5] & ireg_q[3];
 assign hi1x0 = ireg_q[5] & ~ireg_q[3];
 assign hi1x1 = ireg_q[5] & ireg_q[3];
+
+//------------------------------------------------------------------------------
+// INSTRUCTION DECODING LOGIC BLOCK (SPECIFIC INSTRUCTION DECODING)
+//------------------------------------------------------------------------------
 
 // useful alias - memory dst/src indicator
 wire mem_d, mem_s;
@@ -302,12 +378,9 @@ assign i_go6 =
 	(i_sic & hi1x1 & lo001) | // 111x1001 - pchl, sphl (2)
 	(i_sic & hi001 & lo101); // 11001101 - call (1)
 
-// register pair ops?
-wire chk_p;
-assign chk_p =
-	(i_txa & lo011) | // inx, dcx (8)
-	(i_txa & lo001); // dad, lxi (8)
-//	(i_txa & lo010 & hi10x); // shld, lhld (2)
+//------------------------------------------------------------------------------
+// INSTRUCTION DECODING LOGIC BLOCK (MACHINE CYCLE & FLAG DECODING)
+//------------------------------------------------------------------------------
 
 // machine cycles required by current inst? - need always block for this
 wire cyc_1, cyc_2, cyc_3, cyc_4, cyc_5;
@@ -316,7 +389,7 @@ wire cycd2, cycd3, cycd4, cycd5;
 // assign extra cycles if needed - cyc_1 NOT needed?!
 assign cyc_1 = // 148 instructions (5 unused)
 	(i_txa & ~hi110 & lo10x) | // inc & dcr (14)
-	(i_txa & lo000) | // nop, unused{5}, sim, rim (8)
+	(i_txa & lo000 & ~hi000) | // nop, unused{5}, sim, rim (8)
 	(i_txa & lo011) | // inx, dcx (8)
 	(i_txa & lo111) | // rlc,rrc,ral,rar,daa,cma,stc,cmc (8)
 	(i_sic & lo001 & hi1x1) | // pchl, sphl (2)
@@ -451,6 +524,9 @@ reg[STACTLSZ-1:0] stactl;
 reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 reg isfirst, is_bimc, is_next, is_last, is_nxta, is_data;
 reg is_nxtp, is_fin1, is_cond, do_skip;
+// special interrupt acknowledge signal - hardware rst!
+wire h_rst;
+assign h_rst = inta_q;
 // state register - transition on negative edge!
 always @(posedge clk_ or posedge rst) begin
 	if(rst == 1) begin // asynchronous reset
@@ -471,7 +547,7 @@ always @(posedge clk_ or posedge rst) begin
 			end
 			STATE_T1: begin
 				isfirst <= ~do_more[0];
-				is_bimc <= (i_dad|i_hlt)&do_more[0];
+				is_bimc <= ((i_dad|i_hlt)&do_more[0]) | (h_rst&~do_more[0]);
 				is_next <= do_more[1];
 				is_last <= do_more[0] & ~do_more[1];
 				is_nxta <= do_more[0] & do_more[1] & ~do_data[0] & ~do_data[1];
@@ -480,7 +556,9 @@ always @(posedge clk_ or posedge rst) begin
 				is_fin1 <= ~do_more[3];
 				do_skip <= 1'b0;
 				// update stactl on T1
-				if (~do_more[0]) begin
+				if (h_rst&~do_more[0]) begin
+					stactl <= CYCLE_BIT;
+				end else if (~do_more[0]) begin
 					stactl <= CYCLE_OF;
 				end else if (i_dad) begin
 					stactl <= CYCLE_BID;
@@ -495,7 +573,7 @@ always @(posedge clk_ or posedge rst) begin
 				end else if (dowrite[0]&i_dio&do_data[0]) begin
 					stactl <= CYCLE_DW;
 				end else begin
-					stactl <= CYCLE_ERR;
+					stactl <= CYCLE_ERR; // should NOT get here!
 				end
 			end
 			STATE_T3: begin
@@ -533,7 +611,8 @@ always @(posedge clk_ or posedge rst) begin
 end
 
 // next-state logic
-always @(cstate or ireg_q or stactl or is_bimc or isfirst or HOLD or READY)
+always @(cstate or is_bimc or isfirst or HOLD or READY or
+	is_halt or vint_q or i_go6)
 begin
 	nstate = cstate;
 	case (cstate)
@@ -541,7 +620,7 @@ begin
 			nstate = STATE_T1;
 		end
 		STATE_T1: begin
-			if (i_hlt) begin
+			if (is_halt) begin
 				nstate = STATE_TT;
 			end else begin
 				nstate = STATE_T2;
@@ -581,15 +660,16 @@ begin
 		end
 		STATE_TH: begin
 			if (~HOLD) begin
-				if (i_hlt) nstate = STATE_TT;
+				if (is_halt) nstate = STATE_TT;
 				else nstate = STATE_T1;
 			end
 		end
 		STATE_TT: begin
 			if (HOLD) begin
 				nstate = STATE_TH;
+			end else if (vint_q) begin
+				nstate = STATE_T1;
 			end
-			// valid interrupt can get us out back to circulation?
 		end
 	endcase
 end
@@ -600,7 +680,7 @@ reg enb_adh, enb_adl, enb_dat, enb_ctl; // pin enable logic
 always @(cstate) begin
 	case (cstate)
 		STATE_T1: begin
-			if (is_bimc) //i_dad always bimc?
+			if (is_bimc)
 				pin_ale <= 1'b0;
 			else
 				pin_ale <= 1'b1;
@@ -753,21 +833,25 @@ assign ctrl_wr_ = enb_ctl ? pin_wr_ | stactl[CTRL_WR_] | q_rwi : 1'bz;
 assign ctrl_inta_ = pin_ia_ | stactl[CTRL_INTA_] | q_rwi;
 assign ctrl_ale = pin_ale & q_ale;
 
-// internal wiring (combinational logic)
+//------------------------------------------------------------------------------
+// SELECTOR SIGNALS
+//------------------------------------------------------------------------------
+
+// register selector signals
 wire chk_rgr, chk_rgw, chk_irw, chk_nxt, chk_pci, chk_tpi;
+wire chk_int, chk_hlt;
 assign chk_rgr = (((cstate[2]|cstate[3])&~isfirst&~stactl[CTRL_WR_])|
 	((cstate[4]|cstate[5]|cstate[6])&~cycgo[0]));
 assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
 	(((cstate[4]&~i_go6)|cstate[6])&~do_more[0]);
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
-assign chk_pci = (cstate[2]&(isfirst|(~is_bimc&~do_data[0])))|do_skip;
+assign chk_pci = (cstate[2]&((isfirst&~h_rst)|(~is_bimc&~do_data[0])))|do_skip;
 assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop|i_rxx))|
-	(cstate[5]&~is_bimc&((do_data[0]&~i_rcc)|i_cxx));
-
-//------------------------------------------------------------------------------
-// SELECTOR SIGNALS
-//------------------------------------------------------------------------------
+	(cstate[5]&(~is_bimc|h_rst)&((do_data[0]&~i_rcc)|i_cxx));
+assign chk_int = (cstate[4]&~i_go6&cyc_1)|(cstate[6]&cyc_1)|(cstate[7])|
+	(cstate[3]&~isfirst&is_last);
+assign chk_hlt = (cstate[4]&~i_go6); // only used by halt reg
 
 // drive address bus (busa_q)
 wire use_d, usepc, usemm, usem0, usem1;
@@ -836,7 +920,7 @@ wire accu_w, go_acc;
 wire[7:0] accu_d;
 zbuffer acc0 (isalu,res8_q,accu_d);
 zbuffer acc1 (is_wr,busd_d,accu_d);
-zbuffer acc2 (i_rim,intr_q&~INTE_BIT,accu_d);
+zbuffer acc2 (i_rim,ints_q,accu_d);
 zbuffer acc3 (i_lda,busd_d,accu_d);
 zbuffer acc4 (i_rot,rota_d,accu_d);
 zbuffer acc5 (i_acc,aspc_d,accu_d);
@@ -888,13 +972,16 @@ assign regl_w = ((i_dad|i_lhl)&sel_p)|(is_wr&addwr[5])|
 zbuffer bufh (i_shl&is_last,rgq[4],busd_q);
 zbuffer bufl (i_shl&~is_last,rgq[5],busd_q);
 
-// interrupt mask register
-wire [7:0] intr_j, intr_k;
-assign intr_k = (rgq[7]&~INTE_BIT)|(intr_q&INTE_BIT);
-assign intr_j = (intr_q&~INTE_BIT)|({2'b00,ireg_q[3],5'b00000});
-assign intr_w = chk_rgw & (i_sim|i_edi);
-assign intr_d = i_sim ? intr_k : intr_j;
-assign intr_r = 1'b0;
+// serial/interrupt config/status register
+assign intr_w = chk_rgw & i_sim;
+assign intr_d = rgq[7];
+assign ienb_w = chk_rgw & i_edi;
+assign ienb_d = ireg_q[3];
+assign ienb_r = rst | (h_rst&cstate[6]);
+
+// halt register
+assign halt_w = chk_hlt & i_hlt;
+assign halt_d = 1'b1;
 
 // flag input select
 wire flag_w;
@@ -965,13 +1052,38 @@ zbuffer #(16) pcw0 (i_cxx,tptr_q,pctr_q);
 zbuffer #(16) pcw1 (i_jxx,{busd_d,temp_q},pctr_q);
 zbuffer #(16) pcw2 (i_rxx,{busd_d,temp_q},pctr_q);
 zbuffer #(16) pcw3 (i_hpc,rphl_q,pctr_q);
-zbuffer #(16) pcw4 (i_rst,{10'h000,ireg_q[5:3],3'b000},pctr_q);
+zbuffer #(16) pcw4 (i_rst,{10'h000,ireg_q[5:3],h_rst,2'b00},pctr_q);
 // program counter drives data bus?
 zbuffer bpc0 (i_cxx&is_data&~is_last,pcpc_q[15:8],busd_q);
 
+// interrupt priority
+wire ip75_s, ip65_s, ip55_s,trap_s;
+assign trap_s = trap_q;
+assign ip75_s = ~trap_q & ip75_q;
+assign ip65_s = ~trap_q & ~ip75_q & ip65_q;
+assign ip55_s = ~trap_q & ~ip75_q & ~ip65_q & ip55_q;
+
 // instruction register select
+wire chk_i75, chk_i65, chk_i55, chk_trp;
+assign chk_i75 = inta_q & ip75_s;
+assign chk_i65 = inta_q & ip65_s;
+assign chk_i55 = inta_q & ip55_s;
+assign chk_trp = inta_q & trap_s;
+wire[7:0] i7p5_d, i6p5_d, i5p5_d, itrp_d;
+assign i7p5_d = 8'b11_111_111; // rst 7
+assign i6p5_d = 8'b11_110_111; // rst 6
+assign i5p5_d = 8'b11_101_111; // rst 5
+assign itrp_d = 8'b11_100_111; // rst 4
 assign ireg_w = chk_irw;
-assign ireg_d = busd_d;
+zbuffer ins0 (~inta_q,busd_d,ireg_d);
+zbuffer ins1 (chk_i75,i7p5_d,ireg_d);
+zbuffer ins2 (chk_i65,i6p5_d,ireg_d);
+zbuffer ins3 (chk_i55,i5p5_d,ireg_d);
+zbuffer ins4 (chk_trp,itrp_d,ireg_d);
+
+// interrupt acknowledge register select
+assign inta_w = chk_int;
+assign inta_r = rst;
 
 // stack pointer select
 assign sprh_r = 1'b0;
@@ -993,15 +1105,14 @@ zbuffer spl3 (i_hsp,rgq[5],sprl_d);
 assign tprh_r = 1'b0;
 assign tprh_w = (chk_rgw&~is_nxta&~is_data&(i_mmt|i_cxx))|
 	(chk_tpi&i_mmt)|(cstate[4]&i_xhl)|(cstate[4]&i_rst);
-zbuffer tph0 (chk_tpi,idxp_q[15:8],tprh_d);
+zbuffer tph0 (chk_tpi&~i_rst,idxp_q[15:8],tprh_d);
 zbuffer tph1 (i_xhl,rgq[4],tprh_d);
 zbuffer tph2 (~chk_tpi&~i_xhl&~i_rst,busd_d,tprh_d);
 zbuffer tph3 (i_rst,pcpc_q[15:8],tprh_d);
 assign tprl_r = 1'b0;
 assign tprl_w = (chk_rgw&is_nxta&~is_data&(i_mmt|i_cxx))|
 	(chk_tpi&i_mmt)|(cstate[4]&i_xhl)|(cstate[4]&i_rst);
-assign tprl_d = chk_tpi ? idxp_q[7:0] : i_xhl?rgq[5]:busd_d;
-zbuffer tpl0 (chk_tpi,idxp_q[7:0],tprl_d);
+zbuffer tpl0 (chk_tpi&~i_rst,idxp_q[7:0],tprl_d);
 zbuffer tpl1 (i_xhl,rgq[5],tprl_d);
 zbuffer tpl2 (~chk_tpi&~i_xhl&~i_rst,busd_d,tprl_d);
 zbuffer tpl3 (i_rst,pcpc_q[7:0],tprl_d);
