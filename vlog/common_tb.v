@@ -1,5 +1,20 @@
-// signals for 8085 testbench
+/**
+ * common testbench stuffs for 8085 core
+ *
+ * - the expected module declaration and port definitions:
+ *
+module <name> ( CLK, RST_, READY, HOLD, SID, INTR, TRAP, RST75, RST65, RST55,
+	ADDRDATA, ADDR, CLK_OUT, RST_OUT, IOM_, S1, S0, INTA_, WR_, RD_,
+	ALE, HLDA, SOD ); //VCC, VSS // power lines //X1, X2, // cystal input
+input CLK, RST_, READY, HOLD, SID, INTR, TRAP, RST75, RST65, RST55;
+inout[7:0] ADDRDATA;
+output[15:8] ADDR;
+output CLK_OUT, RST_OUT, IOM_, S1, S0, INTA_, WR_, RD_, ALE, HLDA, SOD;
+ *
+ *
+**/
 
+// signals for 8085 core
 reg clk, rst, ready, hold, sid, intr, trap, rst75, rst65, rst55;
 wire[7:0] addrdata, addrhigh;
 wire clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_, ale, hlda, sod;

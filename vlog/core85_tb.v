@@ -2,7 +2,8 @@ module core85_tb();
 
 parameter CLKPTIME = 10; // time unit per clock cycle
 parameter REG_UNIC = 1; // detect unique register change
-parameter SHOW_PC_ = 0; // show program counter when REG_UNIC=1
+parameter SHOW_PC_ = 1; // show program counter when REG_UNIC=1
+parameter SHOWMORE = 0; // show machine cycle decoding
 
 // get tasks and functions from common_tb
 `include "common_tb.v"
@@ -54,7 +55,7 @@ function[16*8-1:0] decode_cycle;
 			dut.CYCLE_DW: text = "I/O WRITE       ";
 			dut.CYCLE_DR: text = "I/O READ        ";
 			dut.CYCLE_INA: text = "INTERRUPT ACK.  ";
-			dut.CYCLE_BID: text = "BUS IDLE (DAA)  ";
+			dut.CYCLE_BID: text = "BUS IDLE (DAD)  ";
 			dut.CYCLE_BIT: text = "BUS IDLE (RST)  ";
 			dut.CYCLE_BIH: text = "BUS_IDLE (HLT)  ";
 			dut.CYCLE_ERR: text = "INTERNAL ERROR  ";
@@ -183,8 +184,10 @@ endgenerate
 always @(dut.ireg_q) begin
 	$write("[%05g] CODE: [I:%h] ", $time, dut.ireg_q);
 	deassemble(dut.ireg_q);
-	$strobe("[EXTRA] [M:%b][W:%b][D:%b][S:%b]\n", dut.cycgo,
-		dut.cycrw, dut.cyccd, dut.i_go6);
+	if (SHOWMORE) begin
+		$strobe("[EXTRA] [M:%b][W:%b][D:%b][S:%b]\n", dut.cycgo,
+			dut.cycrw, dut.cyccd, dut.i_go6);
+	end
 end
 
 // detect stop condition
