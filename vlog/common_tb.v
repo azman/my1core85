@@ -19,6 +19,21 @@ reg clk, rst, ready, hold, sid, intr, trap, rst75, rst65, rst55;
 wire[7:0] addrdata, addrhigh;
 wire clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_, ale, hlda, sod;
 
+// temp signal - to filter out other than 0->1 transitions (sim issue)
+reg f_wr, f_rd, f_ia;
+initial begin
+	f_wr = 1'b0; f_rd = 1'b0; f_ia = 1'b0;
+end
+always @(negedge wr_) begin
+	if (wr_===1'b0)	f_wr = 1'b1;
+end
+always @(negedge rd_) begin
+	if (rd_===1'b0)	f_rd = 1'b1;
+end
+always @(negedge inta_) begin
+	if (inta_===1'b0)	f_ia = 1'b1;
+end
+
 // memory model for 8085 testbench
 reg[7:0] memory[(2**16)-1:0];
 reg[15:0] mem_addr;
@@ -36,7 +51,8 @@ always @(ale) begin
 end
 // memory write
 always @(posedge wr_) begin
-	if (iom_===1'b0) begin
+	if (iom_===1'b0&&f_wr===1'b1) begin
+		f_wr = 1'b0;
 		$write("[%05g] WR MEM@%h: %h => ",$time,mem_addr,memory[mem_addr]);
 		memory[mem_addr] = addrdata;
 		$write("%h\n",memory[mem_addr]);
@@ -44,7 +60,8 @@ always @(posedge wr_) begin
 end
 // memory read
 always @(posedge rd_) begin
-	if (iom_===1'b0) begin
+	if (iom_===1'b0&&f_rd===1'b1) begin
+		f_rd = 1'b0;
 		$write("[%05g] RD MEM@%h: %h\n",$time,mem_addr,memory[mem_addr]);
 	end
 end
@@ -55,7 +72,7 @@ reg[7:0] dev_addr;
 assign addrdata = (rd_===1'b0&&iom_===1'b1) ? dev_addr : 8'hzz;
 // device address latch
 always @(ale) begin
-	if (ale&iom_===1'b1) begin
+	if (ale===1'b1&&iom_===1'b1) begin
 		dev_addr =  addrdata;
 		if(addrdata!==addrhigh) // upper byte should be equal to low byte
 			$write("[%05g] INVALID I/O? (%h:%h)\n",$time,addrhigh,addrdata);
@@ -63,13 +80,15 @@ always @(ale) begin
 end
 // device write
 always @(posedge wr_) begin
-	if (iom_===1'b1) begin
+	if (iom_===1'b1&&f_wr===1'b1) begin
+		f_wr = 1'b0;
 		$write("[%05g] WR DEV@%h => %h\n",$time,dev_addr,addrdata);
 	end
 end
 // device read
 always @(posedge rd_) begin
-	if (iom_===1'b1) begin
+	if (iom_===1'b1&&f_rd===1'b1) begin
+		f_rd = 1'b0;
 		$write("[%05g] RD DEV@%h: %h\n", $time,dev_addr,dev_addr);
 	end
 end

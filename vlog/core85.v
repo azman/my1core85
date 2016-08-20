@@ -65,7 +65,7 @@ assign rst = ~RST_;
 // alias for output signals (driver)
 wire stat_iom_, stat_s1, stat_s0;
 wire ctrl_inta_, ctrl_wr_, ctrl_rd_, ctrl_ale;
-wire opin_sod;
+wire opin_sod, opin_hlda;
 // assign output pins
 assign CLK_OUT = clk; // simply pass
 assign RST_OUT = rst; // simply pass
@@ -76,8 +76,7 @@ assign INTA_ = ctrl_inta_;
 assign WR_ = ctrl_wr_;
 assign RD_ = ctrl_rd_;
 assign ALE = ctrl_ale;
-// not implementing these for now
-assign HLDA = 1'b0;
+assign HLDA = opin_hlda;
 assign SOD = opin_sod;
 
 //------------------------------------------------------------------------------
@@ -223,6 +222,15 @@ register #(1) int_a (clk,inta_r,inta_w,vint_q,inta_q);
 wire halt_w, halt_d, halt_q, is_halt;
 register #(1) halt (clk,rst,halt_w,halt_d,halt_q);
 assign is_halt = halt_q;
+
+// special ff for hold sampling (on state transition!)
+wire hold_q,hold_w;
+register #(1) holdr (clk_,rst,hold_w,HOLD,hold_q);
+
+// special ff for hold acknowledge
+wire hlda_q;
+register #(1) hldar (clk,rst,1'b1,hold_q,hlda_q);
+assign opin_hlda = hlda_q;
 
 // alias data pointer
 wire[15:0] rpbc_q, rpde_q, rphl_q, sptr_q, tptr_q, dptr_q;
@@ -611,8 +619,8 @@ always @(posedge clk_ or posedge rst) begin
 end
 
 // next-state logic
-always @(cstate or is_bimc or isfirst or HOLD or READY or
-	is_halt or vint_q or i_go6)
+always @(cstate or is_bimc or isfirst or READY or
+	is_halt or vint_q or hlda_q or i_go6)
 begin
 	nstate = cstate;
 	case (cstate)
@@ -636,6 +644,8 @@ begin
 		STATE_T3: begin
 			if (isfirst) begin
 				nstate = STATE_T4;
+			end else if (hlda_q) begin
+				nstate = STATE_TH;
 			end else begin
 				nstate = STATE_T1;
 			end
@@ -643,6 +653,8 @@ begin
 		STATE_T4: begin
 			if (i_go6) begin
 				nstate = STATE_T5;
+			end else if (hlda_q) begin
+				nstate = STATE_TH;
 			end else begin
 				nstate = STATE_T1;
 			end
@@ -651,7 +663,11 @@ begin
 			nstate = STATE_T6;
 		end
 		STATE_T6: begin
-			nstate = STATE_T1;
+			if (hlda_q) begin
+				nstate = STATE_TH;
+			end else begin
+				nstate = STATE_T1;
+			end
 		end
 		STATE_TW: begin
 			if (READY|is_bimc) begin
@@ -659,13 +675,13 @@ begin
 			end
 		end
 		STATE_TH: begin
-			if (~HOLD) begin
+			if (~hlda_q) begin
 				if (is_halt) nstate = STATE_TT;
 				else nstate = STATE_T1;
 			end
 		end
 		STATE_TT: begin
-			if (HOLD) begin
+			if (hlda_q) begin
 				nstate = STATE_TH;
 			end else if (vint_q) begin
 				nstate = STATE_T1;
@@ -680,16 +696,16 @@ reg enb_adh, enb_adl, enb_dat, enb_ctl; // pin enable logic
 always @(cstate) begin
 	case (cstate)
 		STATE_T1: begin
-			if (is_bimc)
+			if (is_bimc) // only dad 2nd&3rd cycle?
 				pin_ale <= 1'b0;
 			else
 				pin_ale <= 1'b1;
 			pin_ia_ <= 1'b1; // must be high
 			pin_wr_ <= 1'b1; // must be high
 			pin_rd_ <= 1'b1; // must be high
-			pin_im_ <= 1'b1;
-			pin_sta <= 1'b0;
-			enb_adh <= 1'b1; // always enable T1-T6
+			pin_im_ <= 1'b1; // depends on machine cycle
+			pin_sta <= 1'b0; // depends on machine cycle
+			enb_adh <= 1'b1;
 			enb_adl <= 1'b1;
 			enb_dat <= 1'b0;
 			enb_ctl <= 1'b1;
@@ -699,9 +715,9 @@ always @(cstate) begin
 			pin_ia_ <= 1'b0; // depends on machine cycle
 			pin_wr_ <= 1'b0; // depends on machine cycle
 			pin_rd_ <= 1'b0; // depends on machine cycle
-			pin_im_ <= 1'b1;
-			pin_sta <= 1'b0;
-			enb_adh <= 1'b1; // always enable T1-T6
+			pin_im_ <= 1'b1; // depends on machine cycle
+			pin_sta <= 1'b0; // depends on machine cycle
+			enb_adh <= 1'b1;
 			enb_adl <= 1'b0;
 			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
 			enb_ctl <= 1'b1;
@@ -711,9 +727,9 @@ always @(cstate) begin
 			pin_ia_ <= 1'b0; // depends on machine cycle
 			pin_wr_ <= 1'b0; // depends on machine cycle
 			pin_rd_ <= 1'b0; // depends on machine cycle
-			pin_im_ <= 1'b1;
-			pin_sta <= 1'b0;
-			enb_adh <= 1'b1; // always enable T1-T6
+			pin_im_ <= 1'b1; // depends on machine cycle
+			pin_sta <= 1'b0; // depends on machine cycle
+			enb_adh <= 1'b1;
 			enb_adl <= 1'b0;
 			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
 			enb_ctl <= 1'b1;
@@ -723,8 +739,8 @@ always @(cstate) begin
 			pin_ia_ <= 1'b0; // depends on machine cycle
 			pin_wr_ <= 1'b0; // depends on machine cycle
 			pin_rd_ <= 1'b0; // depends on machine cycle
-			pin_im_ <= 1'b1;
-			pin_sta <= 1'b0;
+			pin_im_ <= 1'b1; // depends on machine cycle
+			pin_sta <= 1'b0; // depends on machine cycle
 			enb_adh <= 1'b1; // always enable T1-T6
 			enb_adl <= 1'b0;
 			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
@@ -735,9 +751,9 @@ always @(cstate) begin
 			pin_ia_ <= 1'b1; // must be high
 			pin_wr_ <= 1'b1; // must be high
 			pin_rd_ <= 1'b1; // must be high
-			pin_im_ <= 1'b0; // overrides status lines
+			pin_im_ <= 1'b0; // overrides status lines '1' during INA?
 			pin_sta <= 1'b1; // overrides status lines
-			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adh <= ~hlda_q; // high-z during HLDA?
 			enb_adl <= 1'b0; // high-z T4-T6
 			enb_dat <= 1'b0; // high-z T4-T6
 			enb_ctl <= 1'b1;
@@ -749,7 +765,7 @@ always @(cstate) begin
 			pin_rd_ <= 1'b1; // must be high
 			pin_im_ <= 1'b0; // overrides status lines
 			pin_sta <= 1'b1; // overrides status lines
-			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adh <= ~hlda_q; // high-z during HLDA?
 			enb_adl <= 1'b0; // high-z T4-T6
 			enb_dat <= 1'b0; // high-z T4-T6
 			enb_ctl <= 1'b1;
@@ -761,7 +777,7 @@ always @(cstate) begin
 			pin_rd_ <= 1'b1; // must be high
 			pin_im_ <= 1'b0; // overrides status lines
 			pin_sta <= 1'b1; // overrides status lines
-			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adh <= ~hlda_q; // high-z during HLDA?
 			enb_adl <= 1'b0; // high-z T4-T6
 			enb_dat <= 1'b0; // high-z T4-T6
 			enb_ctl <= 1'b1;
@@ -811,16 +827,18 @@ assign chk_dat = enb_dat;
 assign chk_ext = (cstate[2]|cstate[3]) & stactl[CTRL_WR_];
 assign chk_mov = (cstate[4]|cstate[6]) & ~cycgo[0];
 
-// create half cycles for ale and rd/wr/inta
-reg q_ale, q_rwi;
+// create half cycles for ale and rd/wr/inta and hold sampling?
+reg q_ale, q_rwi, q_hld;
 always @(posedge clk or posedge rst)
 begin
 	if (rst == 1) begin
 		q_ale <= 1'b1;
 		q_rwi <= 1'b0;
+		q_hld <= 1'b0;
 	end else begin
 		q_ale <= ~pin_ale;
 		q_rwi <= cstate[3];
+		q_hld <= cstate[2]|(cstate[4]&i_go6)|cstate[7]|cstate[9];
 	end
 end
 
@@ -982,6 +1000,9 @@ assign ienb_r = rst | (h_rst&cstate[6]);
 // halt register
 assign halt_w = chk_hlt & i_hlt;
 assign halt_d = 1'b1;
+
+// hold/hlda registers
+assign hold_w = q_hld;
 
 // flag input select
 wire flag_w;

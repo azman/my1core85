@@ -2,8 +2,11 @@ module core85_tb();
 
 parameter CLKPTIME = 10; // time unit per clock cycle
 parameter REG_UNIC = 1; // detect unique register change
-parameter SHOW_PC_ = 1; // show program counter when REG_UNIC=1
+parameter SHOW_PC_ = 0; // show program counter when REG_UNIC=1
 parameter SHOWMORE = 0; // show machine cycle decoding
+parameter SHOW_HH_ = 1; // show hold & interrupt registers
+parameter SHOW_TS_ = 0; // show state register
+parameter SHOW_BUS = 0; // show data/address bus
 
 // get tasks and functions from common_tb
 `include "common_tb.v"
@@ -33,16 +36,29 @@ initial begin
 	#(CLKPTIME*1) rst75 = 1'b0;
 end
 
+// generate hold (dma controller?)
+initial begin
+	#(CLKPTIME*100) hold = 1'b1;
+	$display("[%05g] [HOLD] FREEZE!",$time);
+	#(CLKPTIME*10) hold = 1'b0;
+	$display("[%05g] [HOLD] UNFREEZE!",$time);
+end
+
 // generate clock
 always begin
 	#(CLKPTIME/2) clk = !clk;
 end
 
 // detect new state (alternative to using monitor)
-//always @(dut.cstate) begin
-//	$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
-//		dut.cstate, dut.stactl, addrhigh, addrdata, dut.busd_d, dut.busd_q);
-//end
+generate
+	if (SHOW_TS_) begin
+		always @(dut.cstate) begin
+			$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
+				dut.cstate, dut.stactl, addrhigh, addrdata,
+				dut.busd_d, dut.busd_q);
+		end
+	end
+endgenerate
 
 function[16*8-1:0] decode_cycle;
 	input[dut.STACTLSZ-1:0] stactl;
@@ -72,10 +88,14 @@ always @(dut.cstate) begin
 	end
 end
 
-// detect changes on data bus
-//always @(addrdata) begin
-//	$strobe("[%05g] ADDH:[%h],DATA:[%h]",$time,addrhigh,addrdata);
-//end
+// detect changes on data/addr bus
+generate
+	if (SHOW_BUS) begin
+		always @(addrdata or addrhigh) begin
+			$strobe("[%05g] ADDH:[%h],DATA:[%h]",$time,addrhigh,addrdata);
+		end
+	end
+endgenerate
 
 generate
 if (!REG_UNIC) begin
@@ -154,22 +174,40 @@ end
 endgenerate
 
 // detect change in interrupt flip-flop
-//generate
-//if (REG_UNIC) begin
-//	always @(dut.vint_q) begin
-//		$write("[%05g] REGS: [VINT:%b]\n", $time,dut.vint_q);
-//	end
-//end
-//endgenerate
+generate
+if (SHOW_HH_) begin
+	always @(dut.vint_q) begin
+		$write("[%05g] REGS: [VINT:%b]\n", $time,dut.vint_q);
+	end
+end
+endgenerate
 
 // detect change in internal interrupt acknowledge flip-flop
-//generate
-//if (REG_UNIC) begin
-//	always @(dut.inta_q) begin
-//		$write("[%05g] REGS: [INTA:%b]\n", $time,dut.inta_q);
-//	end
-//end
-//endgenerate
+generate
+if (SHOW_HH_) begin
+	always @(dut.inta_q) begin
+		$write("[%05g] REGS: [INTA:%b]\n", $time,dut.inta_q);
+	end
+end
+endgenerate
+
+// detect change in hold sampling flip-flop
+generate
+if (SHOW_HH_) begin
+	always @(dut.hold_q) begin
+		$write("[%05g] REGS: [HOLD:%b]\n", $time,dut.hold_q);
+	end
+end
+endgenerate
+
+// detect change in hold acknowledge flip-flop
+generate
+if (SHOW_HH_) begin
+	always @(dut.hlda_q) begin
+		$write("[%05g] REGS: [HLDA:%b]\n", $time,dut.hlda_q);
+	end
+end
+endgenerate
 
 // detect change in sod flip-flop
 generate
@@ -199,7 +237,7 @@ end
 
 // fail-safe stop condition
 always begin
-	#6000 $finish;
+	#7000 $finish;
 end
 
 // detect status bits on new t-state

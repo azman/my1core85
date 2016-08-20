@@ -2,8 +2,11 @@
 my1core85
 ---------
 
-An implementation of an 8-bit 8085-binary-compatible microprocesor.
-
+An implementation of an 8-bit 8085-binary-compatible microprocesor. I call
+it binary-compatible because there are some implementations that I am not
+so sure (although the resulting operations are correct). For example, the
+machine cycle after a hardware RST7.5 - I implemented an exact copy of RST7
+(S-W-W), with the S started out as a Bus Idle machine cycle.
 
 Completion Progress:
 
@@ -31,13 +34,13 @@ Completion Progress:
   = {{jnz,jz,jnc,jc,jpo,jpe,jp,pm}} completed (8)
   = {{rnz,rz,rnc,rc,rpo,rpe,rp,rm}} completed (8)
   = {{cnz,cz,cnc,cc,cpo,cpe,cp,cm}} completed (8)
+- hold (dma controller?) sequence completed
+  = should be okay... not thoroughly tested
 - serial facility done (just connect the lines?)
   = not tested (need confirmation from actual board)
 - interrupt facility completed
   = trap not 'activated' for now...
   = intr not done... but just a matter of running inta cycle!
-- Not implemented... yet
-  = hold acknowledge (need to clarify when to do that ? cycles after ?)
 
 Note:
 
