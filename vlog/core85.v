@@ -162,7 +162,7 @@ assign opin_sod = psdo_q; // TEST THIS ON REAL THINGY!!!
 
 // interrupt enable register
 wire ienb_w, ienb_d, ienb_q, ienb_r;
-register #(1) ienb (clk,ienb_r,ienb_w,ienb_d,ienb_q);
+register #(1) ienbr (clk,ienb_r,ienb_w,ienb_d,ienb_q);
 
 // interrupt masks
 wire im75_w, im75_d, im75_q;
@@ -201,27 +201,27 @@ assign irqt_q = irqt_d & TRAP;
 assign ir75_r = 1'b1; // for now ALWAYS reset -- check this later
 
 // signal for interrupt pending status
-wire ip75_q, ip65_q, ip55_q, trap_q;
+wire ip75_q, ip65_q, ip55_q, trap_q, intr_q;
 assign ip75_q = ienb_q & ~mask75 & ir75_q; //pending rst7.5
 assign ip65_q = ienb_q & ~mask65 & RST65; //pending rst6.5
 assign ip55_q = ienb_q & ~mask55 & RST55; //pending rst5.5
 assign trap_q = irqt_q; //pending trap - cannot be masked or ignored!
+assign intr_q = ienb_q & INTR;
 
 // for signal probing
 assign ints_q = {SID,ip75_q,ip65_q,ip55_q,ienb_q,mask75,mask65,mask55};
 
 // signal for valid interrupt
 wire vint_q;
-assign vint_q = trap_q|ip75_q|ip65_q|ip55_q;
+assign vint_q = trap_q|ip75_q|ip65_q|ip55_q; // need to integrate INTR
 
 // special ff for internal interrupt acknowledge
-wire inta_q,inta_r,inta_w;
-register #(1) int_a (clk,inta_r,inta_w,vint_q,inta_q);
+wire inta_q,inta_w;
+register #(1) intar (clk,rst,inta_w,vint_q,inta_q);
 
 // halt ff is needed to allow hold -> halt transition
-wire halt_w, halt_d, halt_q, is_halt;
-register #(1) halt (clk,rst,halt_w,halt_d,halt_q);
-assign is_halt = halt_q;
+wire halt_w, halt_d, halt_q;
+register #(1) haltr (clk,rst,halt_w,halt_d,halt_q);
 
 // special ff for hold sampling (on state transition!)
 wire hold_q,hold_w;
@@ -532,9 +532,6 @@ reg[STACTLSZ-1:0] stactl;
 reg[INFO_CYC-1:0] do_more, dowrite, do_data;
 reg isfirst, is_bimc, is_next, is_last, is_nxta, is_data;
 reg is_nxtp, is_fin1, is_cond, do_skip;
-// special interrupt acknowledge signal - hardware rst!
-wire h_rst;
-assign h_rst = inta_q;
 // need this!?
 wire[STATECNT-1:0] tstate;
 assign tstate = rst ? STATE_TR : nstate;
@@ -556,7 +553,7 @@ always @(posedge clk_ or posedge rst) begin // asynchronous reset
 		end
 		STATE_T1: begin
 			isfirst <= ~do_more[0];
-			is_bimc <= ((i_dad|i_hlt)&do_more[0]) | (h_rst&~do_more[0]);
+			is_bimc <= ((i_dad|i_hlt)&do_more[0]) | (inta_q&~do_more[0]);
 			is_next <= do_more[1];
 			is_last <= do_more[0] & ~do_more[1];
 			is_nxta <= do_more[0] & do_more[1] & ~do_data[0] & ~do_data[1];
@@ -565,7 +562,7 @@ always @(posedge clk_ or posedge rst) begin // asynchronous reset
 			is_fin1 <= ~do_more[3];
 			do_skip <= 1'b0;
 			// update stactl on T1
-			if (h_rst&~do_more[0]) begin
+			if (inta_q&~do_more[0]) begin
 				stactl <= CYCLE_BIT;
 			end else if (~do_more[0]) begin
 				stactl <= CYCLE_OF;
@@ -621,7 +618,7 @@ end
 
 // next-state logic
 always @(cstate or is_bimc or isfirst or READY or
-	is_halt or vint_q or hlda_q or i_go6)
+	halt_q or vint_q or hlda_q or i_go6)
 begin
 	nstate = cstate;
 	case (cstate)
@@ -629,7 +626,7 @@ begin
 			nstate = STATE_T1;
 		end
 		STATE_T1: begin
-			if (is_halt) begin
+			if (halt_q) begin
 				nstate = STATE_TT;
 			end else begin
 				nstate = STATE_T2;
@@ -677,7 +674,7 @@ begin
 		end
 		STATE_TH: begin
 			if (~hlda_q) begin
-				if (is_halt) nstate = STATE_TT;
+				if (halt_q) nstate = STATE_TT;
 				else nstate = STATE_T1;
 			end
 		end
@@ -865,9 +862,9 @@ assign chk_rgw = (cstate[3]&~isfirst&stactl[CTRL_WR_])|
 	(((cstate[4]&~i_go6)|cstate[6])&~do_more[0]);
 assign chk_irw = (cstate[3]&isfirst&stactl[CTRL_WR_]);
 assign chk_nxt = (cstate[5]|cstate[6]);
-assign chk_pci = (cstate[2]&((isfirst&~h_rst)|(~is_bimc&~do_data[0])))|do_skip;
+assign chk_pci = (cstate[2]&((isfirst&~inta_q)|(~is_bimc&~do_data[0])))|do_skip;
 assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop|i_rxx))|
-	(cstate[5]&(~is_bimc|h_rst)&((do_data[0]&~i_rcc)|i_cxx));
+	(cstate[5]&(~is_bimc|inta_q)&((do_data[0]&~i_rcc)|i_cxx));
 assign chk_int = (cstate[4]&~i_go6&cyc_1)|(cstate[6]&cyc_1)|(cstate[9])|
 	(cstate[3]&~isfirst&is_last);
 assign chk_hlt = (cstate[4]&~i_go6); // only used by halt reg
@@ -996,11 +993,11 @@ assign intr_w = chk_rgw & i_sim;
 assign intr_d = rgq[7];
 assign ienb_w = chk_rgw & i_edi;
 assign ienb_d = ireg_q[3];
-assign ienb_r = rst | (h_rst&cstate[6]);
+assign ienb_r = rst | (inta_q&cstate[6]);
 
 // halt register
-assign halt_w = chk_hlt & i_hlt;
-assign halt_d = 1'b1;
+assign halt_w = (chk_hlt & i_hlt) | (cstate[9] & vint_q);
+assign halt_d = ~cstate[9];
 
 // hold/hlda registers
 assign hold_w = q_hld;
@@ -1074,7 +1071,7 @@ zbuffer #(16) pcw0 (i_cxx,tptr_q,pctr_q);
 zbuffer #(16) pcw1 (i_jxx,{busd_d,temp_q},pctr_q);
 zbuffer #(16) pcw2 (i_rxx,{busd_d,temp_q},pctr_q);
 zbuffer #(16) pcw3 (i_hpc,rphl_q,pctr_q);
-zbuffer #(16) pcw4 (i_rst,{10'h000,ireg_q[5:3],h_rst,2'b00},pctr_q);
+zbuffer #(16) pcw4 (i_rst,{10'h000,ireg_q[5:3],inta_q,2'b00},pctr_q);
 // program counter drives data bus?
 zbuffer bpc0 (i_cxx&is_data&~is_last,pcpc_q[15:8],busd_q);
 
@@ -1105,7 +1102,6 @@ zbuffer ins4 (chk_trp,itrp_d,ireg_d);
 
 // interrupt acknowledge register select
 assign inta_w = chk_int;
-assign inta_r = rst;
 
 // stack pointer select
 assign sprh_r = 1'b0;
