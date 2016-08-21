@@ -535,87 +535,88 @@ reg is_nxtp, is_fin1, is_cond, do_skip;
 // special interrupt acknowledge signal - hardware rst!
 wire h_rst;
 assign h_rst = inta_q;
+// need this!?
+wire[STATECNT-1:0] tstate;
+assign tstate = rst ? STATE_TR : nstate;
 // state register - transition on negative edge!
-always @(posedge clk_ or posedge rst) begin
-	if(rst == 1) begin // asynchronous reset
-		cstate <= STATE_TR;
-		// internal registers
-		do_more <= {INFO_CYC{1'b0}};
-		dowrite <= {INFO_CYC{1'b0}};
-		do_data <= {INFO_CYC{1'b0}};
-	end else begin
-		cstate <= nstate;
-		// entry action
-		case (nstate)
-			STATE_TR: begin
+always @(posedge clk_ or posedge rst) begin // asynchronous reset
+	//if(rst == 1) begin
+	//	cstate <= STATE_TR;
+	//end else begin
+	//	cstate <= nstate;
+	//end
+	cstate <= tstate;
+	// entry action
+	case (tstate)
+		STATE_TR: begin
+			do_more <= {INFO_CYC{1'b0}};
+			dowrite <= {INFO_CYC{1'b0}};
+			do_data <= {INFO_CYC{1'b0}};
+			is_cond <= 1'b0;
+		end
+		STATE_T1: begin
+			isfirst <= ~do_more[0];
+			is_bimc <= ((i_dad|i_hlt)&do_more[0]) | (h_rst&~do_more[0]);
+			is_next <= do_more[1];
+			is_last <= do_more[0] & ~do_more[1];
+			is_nxta <= do_more[0] & do_more[1] & ~do_data[0] & ~do_data[1];
+			is_data <= do_data[0];
+			is_nxtp <= do_more[2];
+			is_fin1 <= ~do_more[3];
+			do_skip <= 1'b0;
+			// update stactl on T1
+			if (h_rst&~do_more[0]) begin
+				stactl <= CYCLE_BIT;
+			end else if (~do_more[0]) begin
+				stactl <= CYCLE_OF;
+			end else if (i_dad) begin
+				stactl <= CYCLE_BID;
+			end else if (i_hlt) begin
+				stactl <= CYCLE_BIH;
+			end else if (~dowrite[0]&(~i_dio|~do_data[0])) begin
+				stactl <= CYCLE_MR;
+			end else if (dowrite[0]&(~i_dio|~do_data[0])) begin
+				stactl <= CYCLE_MW;
+			end else if (~dowrite[0]&i_dio&do_data[0]) begin
+				stactl <= CYCLE_DR;
+			end else if (dowrite[0]&i_dio&do_data[0]) begin
+				stactl <= CYCLE_DW;
+			end else begin
+				stactl <= CYCLE_ERR; // should NOT get here!
+			end
+		end
+		STATE_T3: begin
+			// update next machine cycle here
+			if (is_cond&~flags) begin
+				do_more <= {INFO_CYC{1'b0}};
+				dowrite <= {INFO_CYC{1'b0}};
+				do_data <= {INFO_CYC{1'b0}};
+				is_cond <= 1'b0;
+				do_skip <= 1'b1;
+			end else begin
+				do_more <= do_more >> 1;
+				dowrite <= dowrite >> 1;
+				do_data <= do_data >> 1;
+			end
+		end
+		STATE_T4: begin
+			// assign next machine cycle here
+			do_more <= cycgo;
+			dowrite <= cycrw;
+			do_data <= cyccd;
+			// check conditional instructions
+			is_cond <= i_zcc;
+		end
+		STATE_T6: begin
+			if (is_cond&~flags) begin // conditional returns need this!
 				do_more <= {INFO_CYC{1'b0}};
 				dowrite <= {INFO_CYC{1'b0}};
 				do_data <= {INFO_CYC{1'b0}};
 				is_cond <= 1'b0;
 			end
-			STATE_T1: begin
-				isfirst <= ~do_more[0];
-				is_bimc <= ((i_dad|i_hlt)&do_more[0]) | (h_rst&~do_more[0]);
-				is_next <= do_more[1];
-				is_last <= do_more[0] & ~do_more[1];
-				is_nxta <= do_more[0] & do_more[1] & ~do_data[0] & ~do_data[1];
-				is_data <= do_data[0];
-				is_nxtp <= do_more[2];
-				is_fin1 <= ~do_more[3];
-				do_skip <= 1'b0;
-				// update stactl on T1
-				if (h_rst&~do_more[0]) begin
-					stactl <= CYCLE_BIT;
-				end else if (~do_more[0]) begin
-					stactl <= CYCLE_OF;
-				end else if (i_dad) begin
-					stactl <= CYCLE_BID;
-				end else if (i_hlt) begin
-					stactl <= CYCLE_BIH;
-				end else if (~dowrite[0]&(~i_dio|~do_data[0])) begin
-					stactl <= CYCLE_MR;
-				end else if (dowrite[0]&(~i_dio|~do_data[0])) begin
-					stactl <= CYCLE_MW;
-				end else if (~dowrite[0]&i_dio&do_data[0]) begin
-					stactl <= CYCLE_DR;
-				end else if (dowrite[0]&i_dio&do_data[0]) begin
-					stactl <= CYCLE_DW;
-				end else begin
-					stactl <= CYCLE_ERR; // should NOT get here!
-				end
-			end
-			STATE_T3: begin
-				// update next machine cycle here
-				if (is_cond&~flags) begin
-					do_more <= {INFO_CYC{1'b0}};
-					dowrite <= {INFO_CYC{1'b0}};
-					do_data <= {INFO_CYC{1'b0}};
-					is_cond <= 1'b0;
-					do_skip <= 1'b1;
-				end else begin
-					do_more <= do_more >> 1;
-					dowrite <= dowrite >> 1;
-					do_data <= do_data >> 1;
-				end
-			end
-			STATE_T4: begin
-				// assign next machine cycle here
-				do_more <= cycgo;
-				dowrite <= cycrw;
-				do_data <= cyccd;
-				// check conditional instructions
-				is_cond <= i_zcc;
-			end
-			STATE_T6: begin
-				if (is_cond&~flags) begin // conditional returns need this!
-					do_more <= {INFO_CYC{1'b0}};
-					dowrite <= {INFO_CYC{1'b0}};
-					do_data <= {INFO_CYC{1'b0}};
-					is_cond <= 1'b0;
-				end
-			end
-		endcase
-	end
+		end
+	endcase
+
 end
 
 // next-state logic
@@ -741,7 +742,7 @@ always @(cstate) begin
 			pin_rd_ <= 1'b0; // depends on machine cycle
 			pin_im_ <= 1'b1; // depends on machine cycle
 			pin_sta <= 1'b0; // depends on machine cycle
-			enb_adh <= 1'b1; // always enable T1-T6
+			enb_adh <= 1'b1;
 			enb_adl <= 1'b0;
 			enb_dat <= ~stactl[CTRL_WR_]; // enable only if writing
 			enb_ctl <= 1'b1;
@@ -867,7 +868,7 @@ assign chk_nxt = (cstate[5]|cstate[6]);
 assign chk_pci = (cstate[2]&((isfirst&~h_rst)|(~is_bimc&~do_data[0])))|do_skip;
 assign chk_tpi = (cstate[2]&~is_bimc&do_data[0]&(do_data[1]|i_pop|i_rxx))|
 	(cstate[5]&(~is_bimc|h_rst)&((do_data[0]&~i_rcc)|i_cxx));
-assign chk_int = (cstate[4]&~i_go6&cyc_1)|(cstate[6]&cyc_1)|(cstate[7])|
+assign chk_int = (cstate[4]&~i_go6&cyc_1)|(cstate[6]&cyc_1)|(cstate[9])|
 	(cstate[3]&~isfirst&is_last);
 assign chk_hlt = (cstate[4]&~i_go6); // only used by halt reg
 
