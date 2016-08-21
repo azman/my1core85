@@ -201,12 +201,12 @@ assign irqt_q = irqt_d & TRAP;
 assign ir75_r = 1'b1; // for now ALWAYS reset -- check this later
 
 // signal for interrupt pending status
-wire ip75_q, ip65_q, ip55_q, trap_q, intr_q;
+wire ip75_q, ip65_q, ip55_q, trap_q, intp_q;
 assign ip75_q = ienb_q & ~mask75 & ir75_q; //pending rst7.5
 assign ip65_q = ienb_q & ~mask65 & RST65; //pending rst6.5
 assign ip55_q = ienb_q & ~mask55 & RST55; //pending rst5.5
 assign trap_q = irqt_q; //pending trap - cannot be masked or ignored!
-assign intr_q = ienb_q & INTR;
+assign intp_q = ienb_q & INTR;
 
 // for signal probing
 assign ints_q = {SID,ip75_q,ip65_q,ip55_q,ienb_q,mask75,mask65,mask55};
