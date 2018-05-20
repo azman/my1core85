@@ -82,9 +82,12 @@ function[16*8-1:0] decode_cycle;
 endfunction
 
 // detect machine cycle
+//reg[16*8-1:0] mesg;
 always @(dut.cstate) begin
 	if (dut.cstate[1]===1'b1) begin
-		$strobe("[%05g] Machine Cycle: %s",$time, decode_cycle(dut.stactl));
+		//mesg = decode_cycle(dut.stactl);
+		//$strobe("[%05g] Machine Cycle: %s",$time, mesg);
+		$write("[%05g] Machine Cycle: %s\n",$time, decode_cycle(dut.stactl));
 	end
 end
 
