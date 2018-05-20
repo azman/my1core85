@@ -1,8 +1,7 @@
 #!/bin/bash
 TOOLPATH="$(dirname $0)"
 THISPATH="$(pwd)"
-VSRCPATH=${VSRCPATH:="vlog"}
-LINEDIFF=${LINEDIFF:=10}
+VSRCPATH="$THISPATH/vlog"
 #VHDLEXEC="vcom"
 VLOGEXEC="vlog"
 VLIBEXEC="vlib"
@@ -20,19 +19,13 @@ SKIPTEST="NO"
 LIB_COMP="alu_add1b alu_add8b alu_sub1b alu_sub8b alu_logic alu_alu"
 LIB_COMP="${LIB_COMP} decoder zbuffer register incdec"
 
-# make sure target path is available
-[ "$VSRCPATH" == "" ] && VSRCPATH="$(pwd)"
-[ ! -d "${VSRCPATH}" ] &&
-	echo "Invalid path '$VSRCPATH'? Abort!" && exit 1
-VSRCPATH=$(cd $VSRCPATH ; pwd)
-
 # make sure verilog compiler is available
 [ ! -x "${VSIMPATH}" ] &&
 	echo "Cannot find verilog compiler '$VLOGEXEC'! Abort!" && exit 1
 VSIMPATH=$(dirname $VSIMPATH)
 
 # look for available source files...
-lcode=$(find ${VSRCPATH} -maxdepth 1 -name "*.v"|sort)
+lcode=$(find ${VSRCPATH} -maxdepth 1 -name "*.v"|grep -v "*_tb.v"|sort)
 [ "$lcode" == "" ] && echo "No source file found!" && exit 0
 codes=""
 count=0
@@ -58,7 +51,7 @@ while [ "$1" != "" ]; do
 				[ -f $check ] && comps="$comps $check"
 			fi
 			;;
-		--*) ;; # ignore and continue
+		--remove-lib) ;; # ignore and continue
 		-*) echo "Invalid option? Aborting!" && exit 1 ;;
 		*)
 			# any particular module requested?
@@ -71,18 +64,6 @@ while [ "$1" != "" ]; do
 	esac
 	shift
 done
-
-# if no module file specified, terminate?
-[ $count -eq 0 ] && echo "Module(s) NOT specified/found? Aborting!" && exit 1
-
-# check one-file option?
-[ $count -eq 1 ] && ONE_TIME="YES"
-
-# make sure compiler work path is ready
-echo -n "Check/create work path for compiler... "
-${VSIMPATH}/${VLIBEXEC} ${VSIMWORK} >$VSIM_LOG
-[ $? -ne 0 ] && echo "ERROR! [$?]" && exit 1
-echo "done!"
 
 function get_module_name()
 {
@@ -148,6 +129,12 @@ function do_testing()
 	rm -rf $VSIM_LOG
 }
 
+# make sure compiler work path is ready
+echo -n "Check/create work path for compiler... "
+${VSIMPATH}/${VLIBEXEC} ${VSIMWORK} >$VSIM_LOG
+[ $? -ne 0 ] && echo "ERROR! [$?]" && exit 1
+echo "done!"
+
 # build components?
 for comp in $comps ; do
 	file=$(basename $comp)
@@ -160,10 +147,15 @@ for comp in $comps ; do
 	do_compile $comp
 done
 
+# if no module file specified, terminate?
+[ $count -eq 0 ] && exit 0
+
+# check one-file option?
+[ $count -eq 1 ] && ONE_TIME="YES"
+
 # do your thing...
 for code in $codes ; do
-	# ignore testbench
-	#[ "${code//_tb.v/}" != "${code}" ] && continue
+	# get module name & info
 	file=$(basename $code)
 	info=$(get_module_name $code)
 	name=${info%:*}
@@ -183,10 +175,11 @@ for code in $codes ; do
 		echo
 		continue
 	fi
-	info=$(get_module_name $code_tb)
+	file_tb=$(basename $code_tb)
+	info_tb=$(get_module_name $code_tb)
 	name_tb=${info%:*}
 	# display file and module name
-	echo "File: '$code_tb' => Module: '$name_tb'"
+	echo "File: '$file_tb' => Module: '$name_tb'"
 	# compile testbench
 	do_compile $code_tb
 	[ $? -ne 0 ] && continue
