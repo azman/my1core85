@@ -893,8 +893,10 @@ zbuffer #(16) add7 (usemx,sptr_q,busa_q);
 // register addressing
 wire sel_p;
 assign sel_p = is_next;
-wire[2:0] r1add, r2add, rpadd, rxadd;
-wire[7:0] addwr, addrd, addrx, addrp;
+wire[2:0] r1add, r2add, rxadd;
+wire[7:0] addwr, addrd, addrx;
+wire[1:0] rpadd;
+wire[3:0] addrp;
 assign r1add = ireg_q[5:3];
 assign r2add = ireg_q[2:0];
 assign rpadd = ireg_q[5:4];
