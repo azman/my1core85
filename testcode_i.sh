@@ -8,6 +8,12 @@ VSIM_LOG="vlog.log"
 SEL_CODE="$1"
 ONE_TIME="NO"
 
+# make sure target path is available
+[ "$VSRCPATH" == "" ] && VSRCPATH="$(pwd)"
+[ ! -d "${VSRCPATH}" ] &&
+	echo "Invalid path '$VSRCPATH'? Abort!" && exit 1
+VSRCPATH=$(cd $VSRCPATH ; pwd)
+
 # make sure verilog compiler is available
 [ ! -x "${VSIMPATH}" ] &&
 	echo "Cannot find verilog compiler '$VLOGEXEC'! Abort!" && exit 1

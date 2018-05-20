@@ -2,7 +2,6 @@
 TOOLPATH="$(dirname $0)"
 THISPATH="$(pwd)"
 VSRCPATH=${VSRCPATH:="hdl"}
-LINEDIFF=${LINEDIFF:=10}
 #VHDLEXEC="vcom"
 VLOGEXEC="vlog"
 VLIBEXEC="vlib"
