@@ -35,7 +35,7 @@ always @(negedge inta_) begin
 end
 
 // memory model for 8085 testbench
-reg[7:0] memory[(2**16)-1:0];
+reg[7:0] memory[0:(2**16)-1];
 reg[15:0] mem_addr;
 // memory address select
 assign addrdata = (rd_===1'b0&&iom_===1'b0) ? memory[mem_addr] : 16'hzzzz;
