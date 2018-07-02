@@ -177,7 +177,7 @@ for code in $codes ; do
 	fi
 	file_tb=$(basename $code_tb)
 	info_tb=$(get_module_name $code_tb)
-	name_tb=${info%:*}
+	name_tb=${info_tb%:*}
 	# display file and module name
 	echo "File: '$file_tb' => Module: '$name_tb'"
 	# compile testbench
