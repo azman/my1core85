@@ -492,23 +492,31 @@ assign cycd5 =
 // decode cycles required (combinational logic in always block)
 reg[INFO_CYC-1:0] cycgo, cycrw, cyccd;
 reg flags; // flag status as selected by current instruction
-always @(ireg_q) begin
+always @(cyc_1 or cyc_2 or cyc_3 or cyc_4 or cyc_5) begin
 	// mark extra machine cycles
 	if (cyc_2) cycgo = 4'b0001;
 	else if (cyc_3) cycgo = 4'b0011;
 	else if (cyc_4) cycgo = 4'b0111;
 	else if (cyc_5) cycgo = 4'b1111;
 	else cycgo = 4'b0000;
+end
+always @(cycw2 or cycw3 or cycw4 or cycw5) begin
+	// select read/write cycle for extra cycles
 	cycrw = 4'b0000;
 	if (cycw2) cycrw[0] = 1'b1; // write cycle
 	if (cycw3) cycrw[1] = 1'b1; // write cycle
 	if (cycw4) cycrw[2] = 1'b1; // write cycle
 	if (cycw5) cycrw[3] = 1'b1; // write cycle
+end
+always @(cycd2 or cycd3 or cycd4 or cycd5) begin
+	// select data pointer for extra cycles
 	cyccd = 4'b0000;
 	if (cycd2) cyccd[0] = 1'b1; // use data memory pointer
 	if (cycd3) cyccd[1] = 1'b1;
 	if (cycd4) cyccd[2] = 1'b1;
 	if (cycd5) cyccd[3] = 1'b1;
+end
+always @(ireg_q) begin
 	// status for conditional instruction
 	case (ireg_q[5:3])
 		3'b000: flags = ~rgq[6][FLAGBITZ]; // NZ
@@ -537,11 +545,6 @@ wire[STATECNT-1:0] tstate;
 assign tstate = rst ? STATE_TR : nstate;
 // state register - transition on negative edge!
 always @(posedge clk_ or posedge rst) begin // asynchronous reset
-	//if(rst == 1) begin
-	//	cstate <= STATE_TR;
-	//end else begin
-	//	cstate <= nstate;
-	//end
 	cstate <= tstate;
 	// entry action
 	case (tstate)
@@ -613,7 +616,6 @@ always @(posedge clk_ or posedge rst) begin // asynchronous reset
 			end
 		end
 	endcase
-
 end
 
 // next-state logic

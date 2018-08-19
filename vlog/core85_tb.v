@@ -14,10 +14,12 @@ parameter SHOW_BUS = 0; // show data/address bus
 // reset block
 initial begin
 	clk = 1'b0; rst = 1'b1; // power-on reset
+	$display("[%05g] RESET ASSERTED!",$time);
 	ready = 1'b1; hold = 1'b0; sid =  1'b0; // not implemented for now
 	intr =  1'b0; trap =  1'b0; // no interrupts for now
 	rst75 =  1'b0; rst65 =  1'b0; rst55 =  1'b0;
-	#(CLKPTIME*3) rst = 1'b0; // 3-clock cycle reset
+	#(CLKPTIME*7/2) rst = 1'b0; // 3.5-clock cycle reset
+	$display("[%05g] RESET DE-ASSERTED!",$time);
 end
 
 // generate interrupt
@@ -51,50 +53,46 @@ end
 
 // detect new state (alternative to using monitor)
 generate
-	if (SHOW_TS_) begin
-		always @(dut.cstate) begin
-			$strobe("[%05g] STATE: %b {%b}[%h][%h][%h][%h]",$time,
-				dut.cstate, dut.stactl, addrhigh, addrdata,
-				dut.busd_d, dut.busd_q);
-		end
-	end
-endgenerate
-
-function[16*8-1:0] decode_cycle;
-	input[dut.STACTLSZ-1:0] stactl;
-	reg[16*8-1:0] text;
-	begin
-		case(stactl)
-			dut.CYCLE_OF: text = "OPCODE FETCH    ";
-			dut.CYCLE_MW: text = "MEMORY WRITE    ";
-			dut.CYCLE_MR: text = "MEMORY READ     ";
-			dut.CYCLE_DW: text = "I/O WRITE       ";
-			dut.CYCLE_DR: text = "I/O READ        ";
-			dut.CYCLE_INA: text = "INTERRUPT ACK.  ";
-			dut.CYCLE_BID: text = "BUS IDLE (DAD)  ";
-			dut.CYCLE_BIT: text = "BUS IDLE (RST)  ";
-			dut.CYCLE_BIH: text = "BUS_IDLE (HLT)  ";
-			dut.CYCLE_ERR: text = "INTERNAL ERROR  ";
-			default: text = "UNKNOWN ERROR   ";
-		endcase
-		decode_cycle = text;
-	end
-endfunction
-
-// detect machine cycle
-//reg[16*8-1:0] mesg;
-always @(dut.cstate) begin
-	if (dut.cstate[1]===1'b1) begin
-		//mesg = decode_cycle(dut.stactl);
-		//$strobe("[%05g] Machine Cycle: %s",$time, mesg);
-		$write("[%05g] Machine Cycle: %s\n",$time, decode_cycle(dut.stactl));
+if (SHOW_TS_) begin
+	always @(dut.cstate) begin
+		$write("[%05g] STATE: %b {%b}\n",$time,dut.cstate,dut.stactl);
+		// also some important internal status/control bits
+		//$write("[%05g] {chk_adh:%b}{chk_adhl:%b}{chk_dat:%b}\n",
+		//	$time,dut.chk_adh, dut.chk_adl, dut.chk_dat);
+		//$write("[%05g] {chk_rgr:%b}{chk_rgw:%b}{chk_pci:%b}{chk_tpi:%b}\n",
+		//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_pci, dut.chk_tpi);
+		//$write("[%05g] {pcpc_d:%h}{pcpc_w:%b}{pctr_q:%h}{pctr_w:%b}\n",
+		//	$time,dut.pcpc_d, dut.pcpc_w, dut.pctr_q, dut.pctr_w);
+		//$write("[%05g] {upc:%b}{umm:%b}{um0:%b}{um1:%b}{ums:%b}{umt:%b}\n",
+		//	$time,dut.usepc,dut.usemm,dut.usem0,dut.usem1,dut.usems,dut.usemt);
 	end
 end
+endgenerate
+
+// detect machine cycle
+always @(dut.cstate) begin
+	if (dut.cstate[1]===1'b1) begin
+		decode_cycle();
+	end else if (dut.cstate[4]===1'b1) begin
+		// detect extra instruction cycles
+		if (SHOWMORE) begin
+			$write("[%05g] DECODE [M:%b][W:%b][D:%b][S:%b]\n",$time,
+				dut.cycgo,dut.cycrw,dut.cyccd,dut.i_go6);
+		end
+	end
+end
+
+// detect change in status/control signals
+//always @(iom_ or s1 or s0 or inta_ or wr_ or rd_) begin
+	//$write("[%05g] IO/M:%b,S1:%b,S0:%b,INTA:%b,WR:%b,RD:%b\n",
+	//	$time,iom_,s1,s0,inta_,wr_,rd_);
+//end
 
 // detect changes on data/addr bus
 generate
 	if (SHOW_BUS) begin
 		always @(addrdata or addrhigh) begin
+			// strobe will execute last in time unit
 			$strobe("[%05g] ADDH:[%h],DATA:[%h]",$time,addrhigh,addrdata);
 		end
 	end
@@ -225,10 +223,6 @@ endgenerate
 always @(dut.ireg_q) begin
 	$write("[%05g] CODE: [I:%h] ", $time, dut.ireg_q);
 	deassemble(dut.ireg_q);
-	if (SHOWMORE) begin
-		$strobe("[EXTRA] [M:%b][W:%b][D:%b][S:%b]\n", dut.cycgo,
-			dut.cycrw, dut.cyccd, dut.i_go6);
-	end
 end
 
 // detect stop condition
@@ -238,21 +232,9 @@ always begin
 	$finish;
 end
 
-// fail-safe stop condition
+// fail-safe stop condition (1000 clock cycles)
 always begin
-	#7000 $finish;
-end
-
-// detect status bits on new t-state
-always @(negedge clk) begin
-	//$strobe("[%05g] {chk_adh:%b}{chk_adhl:%b}{chk_dat:%b}\n",
-	//	$time,dut.chk_adh, dut.chk_adl, dut.chk_dat);
-	//$strobe("[%05g] {chk_rgr:%b}{chk_rgw:%b}{chk_pci:%b}{chk_tpi:%b}\n",
-	//	$time,dut.chk_rgr, dut.chk_rgw, dut.chk_pci, dut.chk_tpi);
-	//$strobe("[%05g] {pcpc_d:%h}{pcpc_w:%b}{pctr_q:%h}{pctr_w:%b}\n",
-	//	$time,dut.pcpc_d, dut.pcpc_w, dut.pctr_q, dut.pctr_w);
-	//$strobe("[%05g] {upc:%b}{umm:%b}{um0:%b}{um1:%b}{ums:%b}{umt:%b}\n",
-	//	$time,dut.usepc,dut.usemm,dut.usem0,dut.usem1,dut.usems,dut.usemt);
+	#(CLKPTIME*1000) $finish;
 end
 
 core85 dut (clk, ~rst, ready, hold, sid, intr, trap, rst75, rst65, rst55,

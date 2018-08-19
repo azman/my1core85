@@ -19,26 +19,14 @@ reg clk, rst, ready, hold, sid, intr, trap, rst75, rst65, rst55;
 wire[7:0] addrdata, addrhigh;
 wire clk_out, rst_out, iom_, s1, s0, inta_, wr_, rd_, ale, hlda, sod;
 
-// temp signal - to filter out other than 0->1 transitions (sim issue)
-reg f_wr, f_rd, f_ia;
-initial begin
-	f_wr = 1'b0; f_rd = 1'b0; f_ia = 1'b0;
-end
-always @(negedge wr_) begin
-	if (wr_===1'b0)	f_wr = 1'b1;
-end
-always @(negedge rd_) begin
-	if (rd_===1'b0)	f_rd = 1'b1;
-end
-always @(negedge inta_) begin
-	if (inta_===1'b0)	f_ia = 1'b1;
-end
+// assign addrdata on read request
+wire[7:0] mem_data, dev_data;
+assign addrdata = (iom_===1'b0) ? mem_data : dev_data;
 
 // memory model for 8085 testbench
 reg[7:0] memory[0:(2**16)-1];
 reg[15:0] mem_addr;
-// memory address select
-assign addrdata = (rd_===1'b0&&iom_===1'b0) ? memory[mem_addr] : 16'hzzzz;
+assign mem_data = (rd_===1'b0) ? memory[mem_addr] : 8'hzz;
 // memory content setup
 initial begin
 	$readmemh("memory.txt",memory);
@@ -50,26 +38,27 @@ always @(ale) begin
 	end
 end
 // memory write
-always @(posedge wr_) begin
-	if (iom_===1'b0&&f_wr===1'b1) begin
-		f_wr = 1'b0;
+reg prev_wr_;
+always @(wr_) begin
+	if (prev_wr_===1'b1&&wr_===1'b0&&iom_===1'b0) begin
 		$write("[%05g] WR MEM@%h: %h => ",$time,mem_addr,memory[mem_addr]);
 		memory[mem_addr] = addrdata;
 		$write("%h\n",memory[mem_addr]);
 	end
+	prev_wr_ = wr_;
 end
 // memory read
-always @(posedge rd_) begin
-	if (iom_===1'b0&&f_rd===1'b1) begin
-		f_rd = 1'b0;
+reg prev_rd_;
+always @(rd_) begin
+	if (prev_rd_===1'b1&&rd_===1'b0&&iom_===1'b0) begin
 		$write("[%05g] RD MEM@%h: %h\n",$time,mem_addr,memory[mem_addr]);
 	end
+	prev_rd_ = rd_;
 end
 
 // i/o model for 8085 testbench
 reg[7:0] dev_addr;
-// device address select - returns device address on read
-assign addrdata = (rd_===1'b0&&iom_===1'b1) ? dev_addr : 8'hzz;
+assign dev_data = (rd_===1'b0) ? dev_addr : 8'hzz;
 // device address latch
 always @(ale) begin
 	if (ale===1'b1&&iom_===1'b1) begin
@@ -79,18 +68,20 @@ always @(ale) begin
 	end
 end
 // device write
-always @(posedge wr_) begin
-	if (iom_===1'b1&&f_wr===1'b1) begin
-		f_wr = 1'b0;
+reg pdev_wr_;
+always @(wr_) begin
+	if (pdev_wr_===1'b1&&wr_===1'b0&&iom_===1'b1) begin
 		$write("[%05g] WR DEV@%h => %h\n",$time,dev_addr,addrdata);
 	end
+	pdev_wr_ = wr_;
 end
 // device read
-always @(posedge rd_) begin
-	if (iom_===1'b1&&f_rd===1'b1) begin
-		f_rd = 1'b0;
+reg pdev_rd_;
+always @(rd_) begin
+	if (pdev_rd_===1'b1&&rd_===1'b0&&iom_===1'b1) begin
 		$write("[%05g] RD DEV@%h: %h\n", $time,dev_addr,dev_addr);
 	end
+	pdev_rd_ = rd_;
 end
 
 // tasks/functions for 8085 testbench
@@ -234,6 +225,26 @@ task deassemble;
 				end
 			end
 		endcase
+	end
+endtask
+
+task decode_cycle;
+	reg[16*8-1:0] text;
+	begin
+		case(dut.stactl)
+			dut.CYCLE_OF: text = "OPCODE FETCH    ";
+			dut.CYCLE_MW: text = "MEMORY WRITE    ";
+			dut.CYCLE_MR: text = "MEMORY READ     ";
+			dut.CYCLE_DW: text = "I/O WRITE       ";
+			dut.CYCLE_DR: text = "I/O READ        ";
+			dut.CYCLE_INA: text = "INTERRUPT ACK.  ";
+			dut.CYCLE_BID: text = "BUS IDLE (DAD)  ";
+			dut.CYCLE_BIT: text = "BUS IDLE (RST)  ";
+			dut.CYCLE_BIH: text = "BUS_IDLE (HLT)  ";
+			dut.CYCLE_ERR: text = "INTERNAL ERROR  ";
+			default: text = "UNKNOWN ERROR   ";
+		endcase
+		$write("[%05g] Machine Cycle: %s\n",$time,text);
 	end
 endtask
 
