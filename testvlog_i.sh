@@ -151,6 +151,17 @@ function do_testing()
 	rm -rf $VSIM_LOG
 }
 
+# clean up option... starting new
+if [ "$DO_CLEAN" == "YES" ] ; then
+	# clean up work path
+	echo -n "Cleaning up work path... "
+	[ -d $VSIMWORK ] && rm -rf $VSIMWORK
+	echo "done!"
+fi
+
+# if no module file specified, terminate?
+[ $count -eq 0 ] && exit 0
+
 # make sure work path is ready
 echo -n "Check/create work path for compiler... "
 mkdir -pv ${VSIMWORK} >$VSIM_LOG
@@ -170,9 +181,6 @@ for comp in $comps ; do
 	# compile design
 	do_compile $comp
 done
-
-# if no module file specified, terminate?
-[ $count -eq 0 ] && exit 0
 
 # check one-file option?
 [ $count -eq 1 ] && ONE_TIME="YES"
@@ -214,10 +222,3 @@ for code in $codes ; do
 		echo
 	fi
 done
-
-if [ "$DO_CLEAN" == "YES" ] ; then
-	# clean up work path
-	echo -n "Removing work path for compiler... "
-	[ -d $VSIMWORK ] && rm -rf $VSIMWORK
-	echo "done!"
-fi
