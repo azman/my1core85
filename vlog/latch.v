@@ -1,13 +1,14 @@
-module register ( clk, rst, enb, data_in, data_out );
+module latch ( rst, enb, data_in, data_out );
 
 parameter DATASIZE=8;
+parameter ACTLEVEL=1;
 
-input clk, rst, enb;
+input rst, enb;
 input[DATASIZE-1:0] data_in;
 output[DATASIZE-1:0] data_out;
 reg[DATASIZE-1:0] data_out;
 
-always @(posedge clk or posedge rst)  // asynchronous reset!?
+always @(rst or enb)  // asynchronous reset!?
 begin
 	if (rst==1)
 	begin
@@ -15,7 +16,7 @@ begin
 	end
 	else
 	begin
-		if (enb==1) data_out <= data_in;
+		if (enb==ACTLEVEL) data_out <= data_in;
 	end
 end
 

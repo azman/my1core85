@@ -3,7 +3,8 @@ my1vloglib
 ----------
 
 My personal collection (library?) of reusable Verilog HDL codes. Also included
-a bash shell script which can be used to run Modelsim's Verilog simulator.
+are two bash shell scripts that can be used to run either Modelsim's Verilog
+simulator (testvlog.sh) or Icarus Verilog simulator (testvlog_i.sh).
 
 Module Notes:
 
