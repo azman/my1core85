@@ -91,7 +91,7 @@ function do_compile()
 	[ "${code//_tb.v/}" != "${code}" ] && type="testbench"
 	# try to compile
 	echo -n "    Checking $type for sim-ready... "
-	${VSIMPATH}/${VSIMEXEC} ${VLOG_OPT} $code >$VSIM_LOG
+	${VSIMPATH}/${VSIMEXEC} ${VLOG_OPT} $code >$VSIM_LOG 2>$VSIM_LOG
 	if [ $? -eq 0 ] ; then
 		echo "done!"
 		what=0
@@ -129,7 +129,7 @@ function do_testing()
 	local name=${info%:*}
 	# run simulation
 	echo -n "    Creating testbench vvp executable... "
-	${VSIMPATH}/${VSIMEXEC} ${VSIM_OPT} -o $name $code >$VSIM_LOG
+	${VSIMPATH}/${VSIMEXEC} ${VSIM_OPT} -o $name $code >$VSIM_LOG 2>$VSIM_LOG
 	VSIM_RES=$?
 	if [ $VSIM_RES -eq 0 ] ; then
 		echo "completed!"
