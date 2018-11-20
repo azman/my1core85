@@ -16,8 +16,8 @@ VLOG_OPT="+incdir+vlog"
 ONE_TIME="NO"
 DO_CLEAN="NO"
 SKIPTEST="NO"
-LIB_COMP="alu_add1b alu_add8b alu_sub1b alu_sub8b alu_logic alu_alu"
-LIB_COMP="${LIB_COMP} decoder zbuffer register incdec"
+# base module should be specified BEFORE dependants
+LIB_COMP="adder subtractor decoder zbuffer latch register"
 
 # make sure verilog compiler is available
 [ ! -x "${VSIMPATH}" ] &&
