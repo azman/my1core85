@@ -1,0 +1,29 @@
+----------
+my1vloglib
+----------
+
+My personal collection (library?) of reusable Verilog HDL codes. Also included
+are two bash shell scripts that can be used to run either Modelsim's Verilog
+simulator (testvlog.sh) or Icarus Verilog simulator (testvlog_i.sh).
+
+Module Notes:
+
+- decoder
+  = using generate statements to automate assignments
+  = took me a while but i figured it out (have to use >2-input gate)
+
+ModelSim Notes:
+
+- to start working, create a work library
+  = command: vlib <lib-name>
+  = <lib-name> is usually work
+- to compile Verilog source
+  = command: vlog <source-file>
+  = wildcards acceptable e.g. vlog register*
+- to run simulation without waveform viewer
+  = command: vsim -c <lib-name>.module
+  = add '-do "run -all"' to skip simulation prompt
+
+Disclaimer:
+
+Feel free to use the code(s) available here at your own risk :)
