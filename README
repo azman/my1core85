@@ -1,47 +1,29 @@
----------
-my1core85
----------
+----------
+my1vloglib
+----------
 
-An implementation of an 8-bit 8085-binary-compatible microprocesor. I call
-it binary-compatible because there are some implementations that I am not
-so sure (although the resulting operations are correct). For example, the
-machine cycle after a hardware RST7.5 - I implemented an exact copy of RST7
-(S-W-W), with the S started out as a Bus Idle machine cycle.
+My personal collection (library?) of reusable Verilog HDL codes. Also included
+are two bash shell scripts that can be used to run either Modelsim's Verilog
+simulator (testvlog.sh) or Icarus Verilog simulator (testvlog_i.sh).
 
-Completion Progress:
+Module Notes:
 
-- General functionality complete
-  = alu, register, control sequence
-  = <alu>={add,adc,sub,sbb,and,xor,or,cmp}
-- Instructions (01xxxxxx) all completed
-  = {{mov reg,reg},{mov m,reg},{mov reg,m},{hlt}} (64)
-- Instructions (10xxxxxx) all completed
-  = {{<alu> reg},{<alu> m}} (64)
-- Instructions (00xxxxxx) all completed
-  = {{mvi reg,data},{mvi m,data}} completed (8)
-  = {{inr reg},{inr m},{dcr reg},{dcr m}} completed (16)
-  = {{lxi rp,dat16},{dad rp}} completed (8)
-  = {{inx rp},{dcx rp}} completed (8)
-  = {{nop}{unused(5)}{rim}{sim}} completed (8)
-  = {{stax rp},{ldax rp},{sta},{lda},{shld},{lhld}} completed (8)
-  = {{rlc},{rrc},{ral},{rar},{daa},{cma},{cmc},{stc}} completed (8)
-- Instructions (11xxxxxx) all completed
-  = {{<alu>i data}} completed (8)
-  = {{pop rp},{ret},{unused},{pchl},{sphl}} completed (8)
-  = {{push rp},{call},{unused(3)}} completed (8)
-  = {{jmp,unused,out,in,xthl,xchg,di,ei}} completed (8)
-  = {{rst nnn}} completed (8)
-  = {{jnz,jz,jnc,jc,jpo,jpe,jp,pm}} completed (8)
-  = {{rnz,rz,rnc,rc,rpo,rpe,rp,rm}} completed (8)
-  = {{cnz,cz,cnc,cc,cpo,cpe,cp,cm}} completed (8)
-- hold (dma controller?) sequence completed
-  = should be okay... not thoroughly tested
-- serial facility done (just connect the lines?)
-  = not tested (need confirmation from actual board)
-- interrupt facility completed
-  = trap not 'activated' for now...
-  = intr not done... but just a matter of running inta cycle!
+- decoder
+  = using generate statements to automate assignments
+  = took me a while but i figured it out (have to use >2-input gate)
 
-Note:
+ModelSim Notes:
 
-- need a more efficient overall test method :p
+- to start working, create a work library
+  = command: vlib <lib-name>
+  = <lib-name> is usually work
+- to compile Verilog source
+  = command: vlog <source-file>
+  = wildcards acceptable e.g. vlog register*
+- to run simulation without waveform viewer
+  = command: vsim -c <lib-name>.module
+  = add '-do "run -all"' to skip simulation prompt
+
+Disclaimer:
+
+Feel free to use the code(s) available here at your own risk :)
