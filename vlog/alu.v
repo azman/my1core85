@@ -39,9 +39,9 @@ assign tACA = iS[1] ? tB[3] : tC[3];
 assign tCYA = iS[1] ? tB[7] : tC[7];
 
 // adder circuit
-add8b doadd (iA,iB,sC,tADD,tC,dA);
+adder doadd (iA,iB,sC,tADD,tC,dA);
 // subtract circuit
-sub8b dosub (iA,iB,sC,tSUB,tB,dS);
+subtractor dosub (iA,iB,sC,tSUB,tB,dS);
 // logic circuit
 logic dolog (iS[1:0],iA,iB,tL);
 
