@@ -59,6 +59,8 @@ while [ "$1" != "" ]; do
 			if [ "$check" != "" ] ; then
 				check=${VSRCPATH}/$1.v
 				[ -f $check ] && codes="$codes $check" && ((count++))
+			else
+				echo "Unknown module '$1'"
 			fi
 			;;
 	esac
